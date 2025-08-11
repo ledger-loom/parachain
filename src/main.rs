@@ -2,17 +2,19 @@ mod types;
 mod user_management;
 mod company_management;
 mod role_permissions;
+mod product_management;
 
 use types::*;
 use user_management::*;
 use company_management::*;
 use role_permissions::*;
+use product_management::*;
 
 fn main() {
     println!("🚀 Supply Chain Parachain Node Starting...");
     println!("📦 Environment: Development");
-    println!("🔧 Status: Role & Permissions system implemented");
-    println!("📋 Next: Implementing Product Management pallet");
+    println!("🔧 Status: Product Management pallet implemented");
+    println!("📋 Next: Implementing Supply Chain Tracking pallet");
     println!();
     
     // Demo the core data structures
@@ -26,6 +28,9 @@ fn main() {
     
     // Demo role & permissions system
     demo_role_permissions();
+    
+    // Demo product management system
+    demo_product_management();
     
     println!("Development environment setup completed successfully!");
 }
@@ -438,4 +443,242 @@ fn demo_role_permissions() {
     }
     
     println!("   ✅ Role & Permissions system working correctly!");
+}
+
+fn demo_product_management() {
+    println!("\n📦 Demonstrating Product Management Pallet:");
+    
+    let mut product_mgmt = ProductManagement::new();
+    let company_id = "company_1".to_string();
+    let owner_id = "user_1".to_string();
+    let manager_id = "user_2".to_string();
+    
+    // Set up roles first
+    product_mgmt.set_owner_role(company_id.clone(), owner_id.clone());
+    product_mgmt.assign_role(company_id.clone(), manager_id.clone(), UserRole::Manager, owner_id.clone())
+        .expect("Failed to assign manager role");
+    
+    // Create product categories with attribute schemas
+    let food_category_schema = vec![
+        AttributeSchema {
+            name: "origin".to_string(),
+            attribute_type: AttributeType::Text,
+            required: true,
+            default_value: None,
+            validation_rules: vec![ValidationRule::MinLength(2)],
+        },
+        AttributeSchema {
+            name: "weight".to_string(),
+            attribute_type: AttributeType::Measurement { unit: "kg".to_string() },
+            required: true,
+            default_value: Some("1.0".to_string()),
+            validation_rules: vec![ValidationRule::MinValue(0.1), ValidationRule::MaxValue(100.0)],
+        },
+        AttributeSchema {
+            name: "organic".to_string(),
+            attribute_type: AttributeType::Boolean,
+            required: false,
+            default_value: Some("false".to_string()),
+            validation_rules: vec![],
+        },
+        AttributeSchema {
+            name: "grade".to_string(),
+            attribute_type: AttributeType::Choice(vec!["A".to_string(), "B".to_string(), "C".to_string()]),
+            required: false,
+            default_value: Some("B".to_string()),
+            validation_rules: vec![],
+        },
+    ];
+    
+    let category_id = product_mgmt.create_category(
+        owner_id.clone(),
+        company_id.clone(),
+        "Food & Beverages".to_string(),
+        "Food and beverage products".to_string(),
+        None,
+        food_category_schema.clone(),
+    ).expect("Failed to create category");
+    
+    println!("   🏷️  Category created: {}", category_id);
+    
+    // Create subcategory
+    let subcategory_id = product_mgmt.create_category(
+        manager_id.clone(),
+        company_id.clone(),
+        "Coffee".to_string(),
+        "Coffee products and beans".to_string(),
+        Some(category_id.clone()),
+        food_category_schema,
+    ).expect("Failed to create subcategory");
+    
+    println!("   📂 Subcategory created: {}", subcategory_id);
+    
+    // Create a product template
+    let mut template_attributes = std::collections::HashMap::new();
+    template_attributes.insert("origin".to_string(), "Ethiopia".to_string());
+    template_attributes.insert("weight".to_string(), "1.0".to_string());
+    template_attributes.insert("organic".to_string(), "true".to_string());
+    template_attributes.insert("grade".to_string(), "A".to_string());
+    
+    let template_id = product_mgmt.create_product_template(
+        owner_id.clone(),
+        company_id.clone(),
+        "Premium Coffee Template".to_string(),
+        "Template for premium organic coffee products".to_string(),
+        subcategory_id.clone(),
+        template_attributes,
+    ).expect("Failed to create template");
+    
+    println!("   📋 Product template created: {}", template_id);
+    
+    // Create products using template
+    let mut attribute_overrides = std::collections::HashMap::new();
+    attribute_overrides.insert("origin".to_string(), "Colombia".to_string());
+    
+    let product_id1 = product_mgmt.create_product_from_template(
+        manager_id.clone(),
+        template_id.clone(),
+        "Colombian Premium Coffee".to_string(),
+        Some("Single-origin Colombian coffee beans".to_string()),
+        attribute_overrides,
+    ).expect("Failed to create product from template");
+    
+    println!("   ☕ Product created from template: {}", product_id1);
+    
+    // Create another product directly
+    let mut product_attributes = std::collections::HashMap::new();
+    product_attributes.insert("origin".to_string(), "Brazil".to_string());
+    product_attributes.insert("weight".to_string(), "0.5".to_string());
+    product_attributes.insert("organic".to_string(), "false".to_string());
+    product_attributes.insert("grade".to_string(), "B".to_string());
+    
+    let product_id2 = product_mgmt.create_product(
+        owner_id.clone(),
+        company_id.clone(),
+        "Brazilian Coffee Blend".to_string(),
+        "Medium roast Brazilian coffee blend".to_string(),
+        subcategory_id.clone(),
+        product_attributes,
+    ).expect("Failed to create product");
+    
+    println!("   ☕ Product created directly: {}", product_id2);
+    
+    // Create product batches
+    let mut quality_metrics = std::collections::HashMap::new();
+    quality_metrics.insert("acidity".to_string(), "4.2".to_string());
+    quality_metrics.insert("body".to_string(), "medium".to_string());
+    quality_metrics.insert("aroma".to_string(), "strong".to_string());
+    
+    let batch_id1 = product_mgmt.create_product_batch(
+        manager_id.clone(),
+        product_id1.clone(),
+        "COL-2024-001".to_string(),
+        1000, // quantity
+        1640995200, // manufacturing date
+        Some(1672531200), // expiry date (1 year later)
+        quality_metrics.clone(),
+    ).expect("Failed to create batch");
+    
+    println!("   📦 Product batch created: {}", batch_id1);
+    
+    // Update batch status
+    product_mgmt.update_batch_status(
+        manager_id.clone(),
+        batch_id1.clone(),
+        BatchStatus::QualityCheck,
+    ).expect("Failed to update batch status");
+    
+    println!("   ✅ Batch status updated to QualityCheck");
+    
+    // Update product information
+    let mut updated_attributes = std::collections::HashMap::new();
+    updated_attributes.insert("origin".to_string(), "Colombia - Huila Region".to_string());
+    updated_attributes.insert("weight".to_string(), "1.0".to_string());
+    updated_attributes.insert("organic".to_string(), "true".to_string());
+    updated_attributes.insert("grade".to_string(), "A".to_string());
+    
+    product_mgmt.update_product(
+        owner_id.clone(),
+        product_id1.clone(),
+        None,
+        Some("Single-origin Colombian coffee from Huila region".to_string()),
+        Some(updated_attributes),
+    ).expect("Failed to update product");
+    
+    println!("   🔄 Product updated with detailed origin information");
+    
+    // Search products
+    let search_filter = ProductSearchFilter {
+        company_id: Some(company_id.clone()),
+        category_id: Some(subcategory_id.clone()),
+        name_contains: Some("Coffee".to_string()),
+        attributes: {
+            let mut attrs = std::collections::HashMap::new();
+            attrs.insert("organic".to_string(), "true".to_string());
+            attrs
+        },
+        created_after: None,
+        created_before: None,
+    };
+    
+    let search_results = product_mgmt.search_products(
+        owner_id.clone(),
+        company_id.clone(),
+        search_filter,
+    ).expect("Failed to search products");
+    
+    println!("   🔍 Search results (organic coffee): {} products found", search_results.len());
+    
+    // Get product information
+    if let Some(product) = product_mgmt.get_product(&product_id1) {
+        println!("   📋 Product details: {} - {}", product.name, product.description);
+        println!("      Attributes: {} items", product.attributes.len());
+        for (key, value) in &product.attributes {
+            println!("         {}: {}", key, value);
+        }
+    }
+    
+    // Get category information
+    if let Some(category) = product_mgmt.get_category(&subcategory_id) {
+        println!("   🏷️  Category: {} with {} attribute schemas", category.name, category.attributes_schema.len());
+    }
+    
+    // Get company products
+    let company_products = product_mgmt.get_company_products(&company_id);
+    println!("   🏢 Company has {} products", company_products.len());
+    
+    // Get category products
+    let category_products = product_mgmt.get_category_products(&subcategory_id);
+    println!("   📂 Coffee category has {} products", category_products.len());
+    
+    // Get statistics
+    let stats = product_mgmt.get_product_stats(&company_id);
+    println!("   📊 Product Statistics:");
+    println!("      - Total Products: {}", stats.total_products);
+    println!("      - Total Categories: {}", stats.total_categories);
+    println!("      - Categories Used: {}", stats.categories_used);
+    println!("      - Total Batches: {}", stats.total_batches);
+    println!("      - Total Templates: {}", stats.total_templates);
+    
+    // Test validation error
+    let mut invalid_attributes = std::collections::HashMap::new();
+    invalid_attributes.insert("origin".to_string(), "X".to_string()); // Too short
+    invalid_attributes.insert("weight".to_string(), "150.0".to_string()); // Too heavy
+    
+    match product_mgmt.create_product(
+        owner_id.clone(),
+        company_id.clone(),
+        "Invalid Product".to_string(),
+        "This should fail validation".to_string(),
+        subcategory_id.clone(),
+        invalid_attributes,
+    ) {
+        Ok(_) => println!("   ❌ Validation should have failed"),
+        Err(ProductManagementError::AttributeValidationError(msg)) => {
+            println!("   ✅ Validation correctly failed: {}", msg);
+        },
+        Err(e) => println!("   ❓ Unexpected error: {:?}", e),
+    }
+    
+    println!("   ✅ Product Management pallet working correctly!");
 }
