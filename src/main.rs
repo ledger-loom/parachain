@@ -3,18 +3,20 @@ mod user_management;
 mod company_management;
 mod role_permissions;
 mod product_management;
+mod supply_chain_tracking;
 
 use types::*;
 use user_management::*;
 use company_management::*;
 use role_permissions::*;
 use product_management::*;
+use supply_chain_tracking::*;
 
 fn main() {
     println!("🚀 Supply Chain Parachain Node Starting...");
     println!("📦 Environment: Development");
-    println!("🔧 Status: Product Management pallet implemented");
-    println!("📋 Next: Implementing Supply Chain Tracking pallet");
+    println!("🔧 Status: Supply Chain Tracking pallet implemented");
+    println!("📋 Next: Creating frontend web application");
     println!();
     
     // Demo the core data structures
@@ -31,6 +33,9 @@ fn main() {
     
     // Demo product management system
     demo_product_management();
+    
+    // Demo supply chain tracking system
+    demo_supply_chain_tracking();
     
     println!("Development environment setup completed successfully!");
 }
@@ -144,7 +149,7 @@ fn demo_user_management() {
         Document {
             id: "doc_001".to_string(),
             name: "Driver's License".to_string(),
-            document_type: DocumentType::GovernmentId,
+            document_type: user_management::DocumentType::GovernmentId,
             hash: "abc123hash".to_string(),
             uploaded_at: 1640995200,
         }
@@ -681,4 +686,289 @@ fn demo_product_management() {
     }
     
     println!("   ✅ Product Management pallet working correctly!");
+}
+
+fn demo_supply_chain_tracking() {
+    println!("\n🚚 Demonstrating Supply Chain Tracking Pallet:");
+    
+    let mut tracking_system = SupplyChainTracking::new();
+    let company_id = "company_1".to_string();
+    let owner_id = "user_1".to_string();
+    let warehouse_id = "user_3".to_string();
+    let transport_id = "user_4".to_string();
+    
+    // Set up roles
+    tracking_system.set_owner_role(company_id.clone(), owner_id.clone());
+    tracking_system.assign_role(company_id.clone(), warehouse_id.clone(), UserRole::Warehouse, owner_id.clone())
+        .expect("Failed to assign warehouse role");
+    tracking_system.assign_role(company_id.clone(), transport_id.clone(), UserRole::Transport, owner_id.clone())
+        .expect("Failed to assign transport role");
+    
+    // Register locations
+    let factory_location_id = tracking_system.register_location(
+        owner_id.clone(),
+        company_id.clone(),
+        "Coffee Processing Factory".to_string(),
+        "123 Industrial Ave, Medellín, Colombia".to_string(),
+        Some(Coordinates { latitude: 6.2442, longitude: -75.5812 }),
+        LocationType::Factory,
+        "America/Bogota".to_string(),
+        Some(ContactInfo {
+            phone: Some("+57-4-123-4567".to_string()),
+            email: Some("factory@coffee.co".to_string()),
+            contact_person: Some("Carlos Rodriguez".to_string()),
+        }),
+    ).expect("Failed to register factory location");
+    
+    println!("   🏭 Factory location registered: {}", factory_location_id);
+    
+    let warehouse_location_id = tracking_system.register_location(
+        owner_id.clone(),
+        company_id.clone(),
+        "Distribution Warehouse".to_string(),
+        "456 Logistics Blvd, Bogotá, Colombia".to_string(),
+        Some(Coordinates { latitude: 4.6097, longitude: -74.0817 }),
+        LocationType::Warehouse,
+        "America/Bogota".to_string(),
+        Some(ContactInfo {
+            phone: Some("+57-1-789-0123".to_string()),
+            email: Some("warehouse@coffee.co".to_string()),
+            contact_person: Some("Maria Santos".to_string()),
+        }),
+    ).expect("Failed to register warehouse location");
+    
+    println!("   📦 Warehouse location registered: {}", warehouse_location_id);
+    
+    let customer_location_id = tracking_system.register_location(
+        owner_id.clone(),
+        company_id.clone(),
+        "Premium Coffee Store".to_string(),
+        "789 Main St, Miami, FL, USA".to_string(),
+        Some(Coordinates { latitude: 25.7617, longitude: -80.1918 }),
+        LocationType::CustomerLocation,
+        "America/New_York".to_string(),
+        Some(ContactInfo {
+            phone: Some("+1-305-555-0123".to_string()),
+            email: Some("orders@premiumcoffee.com".to_string()),
+            contact_person: Some("John Smith".to_string()),
+        }),
+    ).expect("Failed to register customer location");
+    
+    println!("   🏪 Customer location registered: {}", customer_location_id);
+    
+    // Create tracking entries for a product journey
+    let product_id = "prod_1".to_string();
+    
+    // Step 1: Production started
+    let mut production_metadata = std::collections::HashMap::new();
+    production_metadata.insert("batch_size".to_string(), "1000kg".to_string());
+    production_metadata.insert("roast_level".to_string(), "medium".to_string());
+    
+    let entry1_id = tracking_system.create_tracking_entry(
+        owner_id.clone(),
+        company_id.clone(),
+        product_id.clone(),
+        TrackingStatus::InProduction,
+        factory_location_id.clone(),
+        Some("Coffee roasting process initiated".to_string()),
+        production_metadata,
+        Some(EnvironmentalData {
+            temperature: Some(220.0), // Roasting temperature
+            humidity: Some(45.0),
+            pressure: Some(1013.25),
+            vibration: None,
+            light_exposure: None,
+            recorded_at: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+            sensor_id: Some("TEMP_001".to_string()),
+        }),
+    ).expect("Failed to create production entry");
+    
+    println!("   ☕ Production tracking entry created: {}", entry1_id);
+    
+    // Step 2: Quality check
+    let entry2_id = tracking_system.create_tracking_entry(
+        warehouse_id.clone(),
+        company_id.clone(),
+        product_id.clone(),
+        TrackingStatus::QualityCheck,
+        factory_location_id.clone(),
+        Some("Quality control inspection completed".to_string()),
+        std::collections::HashMap::new(),
+        Some(EnvironmentalData {
+            temperature: Some(22.0), // Room temperature
+            humidity: Some(60.0),
+            pressure: Some(1013.25),
+            vibration: None,
+            light_exposure: Some(300.0),
+            recorded_at: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+            sensor_id: Some("ENV_001".to_string()),
+        }),
+    ).expect("Failed to create quality check entry");
+    
+    println!("   ✅ Quality check tracking entry created: {}", entry2_id);
+    
+    // Add quality certificate document
+    let doc_id = tracking_system.add_document_to_entry(
+        warehouse_id.clone(),
+        company_id.clone(),
+        entry2_id.clone(),
+        supply_chain_tracking::DocumentType::Certificate,
+        "Quality Control Certificate".to_string(),
+        "sha256:abc123def456...".to_string(), // Document hash
+    ).expect("Failed to add document");
+    
+    println!("   📄 Quality certificate added: {}", doc_id);
+    
+    // Step 3: Ready to ship
+    let entry3_id = tracking_system.create_tracking_entry(
+        warehouse_id.clone(),
+        company_id.clone(),
+        product_id.clone(),
+        TrackingStatus::ReadyToShip,
+        warehouse_location_id.clone(),
+        Some("Product packaged and ready for shipment".to_string()),
+        std::collections::HashMap::new(),
+        None,
+    ).expect("Failed to create ready to ship entry");
+    
+    println!("   📋 Ready to ship tracking entry created: {}", entry3_id);
+    
+    // Create shipment
+    let shipment_id = tracking_system.create_shipment(
+        transport_id.clone(),
+        company_id.clone(),
+        vec![product_id.clone()],
+        warehouse_location_id.clone(),
+        customer_location_id.clone(),
+        company_id.clone(), // Self-shipping
+        Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() + 7 * 24 * 60 * 60), // 7 days
+        Some("TRACK-COL-US-001".to_string()),
+        Some("Handle with care - premium coffee product".to_string()),
+    ).expect("Failed to create shipment");
+    
+    println!("   🚛 Shipment created: {} (Tracking: TRACK-COL-US-001)", shipment_id);
+    
+    // Step 4: Delivered
+    let mut delivery_metadata = std::collections::HashMap::new();
+    delivery_metadata.insert("recipient".to_string(), "John Smith".to_string());
+    delivery_metadata.insert("delivery_time".to_string(), "14:30 EST".to_string());
+    
+    let entry4_id = tracking_system.create_tracking_entry(
+        transport_id.clone(),
+        company_id.clone(),
+        product_id.clone(),
+        TrackingStatus::Delivered,
+        customer_location_id.clone(),
+        Some("Successfully delivered to customer".to_string()),
+        delivery_metadata,
+        None,
+    ).expect("Failed to create delivery entry");
+    
+    println!("   ✅ Delivery tracking entry created: {}", entry4_id);
+    
+    // Query tracking entries
+    let tracking_query = TrackingQuery {
+        product_id: Some(product_id.clone()),
+        company_id: Some(company_id.clone()),
+        status: None,
+        location_type: None,
+        date_from: None,
+        date_to: None,
+        operator_id: None,
+        shipment_id: None,
+    };
+    
+    let tracking_results = tracking_system.query_tracking_entries(
+        owner_id.clone(),
+        company_id.clone(),
+        tracking_query,
+    ).expect("Failed to query tracking entries");
+    
+    println!("   🔍 Tracking query results: {} entries found", tracking_results.len());
+    
+    // Display journey details
+    if let Some(journey) = tracking_system.get_product_journey(&product_id) {
+        println!("   📋 Product Journey Summary:");
+        println!("      - Product ID: {}", journey.product_id);
+        println!("      - Current Status: {:?}", journey.current_status);
+        println!("      - Current Location: {}", journey.current_location.name);
+        println!("      - Journey Steps: {}", journey.tracking_entries.len());
+        println!("      - Companies Involved: {}", journey.companies_involved.len());
+        println!("      - Started: {} (timestamp)", journey.started_at);
+        if let Some(delivered_at) = journey.actual_delivery {
+            println!("      - Delivered: {} (timestamp)", delivered_at);
+            println!("      - Total Journey Time: {} seconds", delivered_at - journey.started_at);
+        }
+    }
+    
+    // Show detailed tracking entries
+    println!("\n   📊 Detailed Tracking History:");
+    for (i, entry) in tracking_results.iter().enumerate() {
+        println!("      Step {}: {:?} at {} ({})", 
+                 i + 1, entry.status, entry.location.name, entry.timestamp);
+        if let Some(ref notes) = entry.notes {
+            println!("         Notes: {}", notes);
+        }
+        if let Some(ref env_data) = entry.environmental_data {
+            if let Some(temp) = env_data.temperature {
+                println!("         Temperature: {}°C", temp);
+            }
+            if let Some(humidity) = env_data.humidity {
+                println!("         Humidity: {}%", humidity);
+            }
+        }
+        if !entry.documents.is_empty() {
+            println!("         Documents: {} attached", entry.documents.len());
+        }
+    }
+    
+    // Test different status queries
+    let in_transit_query = TrackingQuery {
+        product_id: None,
+        company_id: Some(company_id.clone()),
+        status: Some(TrackingStatus::InTransit),
+        location_type: None,
+        date_from: None,
+        date_to: None,
+        operator_id: None,
+        shipment_id: None,
+    };
+    
+    let in_transit_results = tracking_system.query_tracking_entries(
+        owner_id.clone(),
+        company_id.clone(),
+        in_transit_query,
+    ).expect("Failed to query in-transit entries");
+    
+    println!("\n   🚛 In-Transit Products: {} found", in_transit_results.len());
+    
+    // Get tracking statistics
+    let stats = tracking_system.get_tracking_stats(&company_id);
+    println!("   📈 Tracking Statistics:");
+    println!("      - Total Tracking Entries: {}", stats.total_entries);
+    println!("      - Active Shipments: {}", stats.active_shipments);
+    println!("      - Delivered Products: {}", stats.delivered_products);
+    println!("      - In-Transit Products: {}", stats.in_transit_products);
+    println!("      - Total Locations: {}", stats.total_locations);
+    println!("      - Total Notifications: {}", stats.total_notifications);
+    
+    // Test invalid status transition (should fail)
+    match tracking_system.create_tracking_entry(
+        warehouse_id.clone(),
+        company_id.clone(),
+        product_id.clone(),
+        TrackingStatus::InProduction, // Invalid: can't go back to production from delivered
+        factory_location_id.clone(),
+        Some("Invalid transition test".to_string()),
+        std::collections::HashMap::new(),
+        None,
+    ) {
+        Ok(_) => println!("   ❌ Invalid status transition should have failed"),
+        Err(SupplyChainTrackingError::InvalidStatusTransition) => {
+            println!("   ✅ Invalid status transition correctly rejected");
+        },
+        Err(e) => println!("   ❓ Unexpected error: {:?}", e),
+    }
+    
+    println!("   ✅ Supply Chain Tracking pallet working correctly!");
 }
