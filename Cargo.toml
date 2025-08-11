@@ -1,0 +1,9 @@
+[package]
+name = "supply-chain-parachain"
+version = "0.1.0"
+edition = "2021"
+authors = ["Supply Chain Team"]
+description = "A Polkadot parachain for supply chain management"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
