@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum UserRole {
     Owner,
     Manager,
@@ -108,12 +108,6 @@ pub struct ProductJourney {
     pub current_location: Location,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Permission {
-    pub resource: String,
-    pub action: String,
-    pub role: UserRole,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditLog {

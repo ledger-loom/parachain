@@ -1,16 +1,18 @@
 mod types;
 mod user_management;
 mod company_management;
+mod role_permissions;
 
 use types::*;
 use user_management::*;
 use company_management::*;
+use role_permissions::*;
 
 fn main() {
     println!("🚀 Supply Chain Parachain Node Starting...");
     println!("📦 Environment: Development");
-    println!("🔧 Status: Company Management pallet implemented");
-    println!("📋 Next: Implementing Role & Permissions system");
+    println!("🔧 Status: Role & Permissions system implemented");
+    println!("📋 Next: Implementing Product Management pallet");
     println!();
     
     // Demo the core data structures
@@ -21,6 +23,9 @@ fn main() {
     
     // Demo company management functionality
     demo_company_management();
+    
+    // Demo role & permissions system
+    demo_role_permissions();
     
     println!("Development environment setup completed successfully!");
 }
@@ -313,4 +318,124 @@ fn demo_company_management() {
     println!("      - Avg Members per Company: {:.1}", stats.average_members_per_company);
     
     println!("   ✅ Company Management pallet working correctly!");
+}
+
+fn demo_role_permissions() {
+    println!("\n🔐 Demonstrating Role & Permissions System:");
+    
+    let mut role_system = RolePermissionSystem::new();
+    
+    // Assign roles to users in a company
+    let company_id = "company_1".to_string();
+    let owner_id = "user_1".to_string();
+    let manager_id = "user_2".to_string();
+    let warehouse_id = "user_3".to_string();
+    
+    // Set owner role (simulates company creation)
+    role_system.set_owner_role(company_id.clone(), owner_id.clone());
+    
+    // Owner assigns manager role
+    role_system.assign_role(company_id.clone(), manager_id.clone(), UserRole::Manager, owner_id.clone())
+        .expect("Failed to assign manager role");
+    
+    println!("   👑 Owner role: {} assigned to company {}", owner_id, company_id);
+    println!("   👔 Manager role assigned to user: {}", manager_id);
+    
+    // Owner assigns warehouse role (managers can manage their subordinates)
+    role_system.assign_role(company_id.clone(), warehouse_id.clone(), UserRole::Warehouse, owner_id.clone())
+        .expect("Failed to assign warehouse role");
+    
+    println!("   📦 Warehouse role assigned to user: {}", warehouse_id);
+    
+    // Test permission checks
+    println!("\n   🔍 Testing Permission Checks:");
+    
+    // Owner should have all permissions
+    let can_manage_company = role_system.has_permission(&owner_id, &company_id, &ResourceType::Company, &ActionType::Manage);
+    println!("      Owner can manage company: {}", can_manage_company);
+    
+    let can_create_products = role_system.has_permission(&manager_id, &company_id, &ResourceType::Product, &ActionType::Create);
+    println!("      Manager can create products: {}", can_create_products);
+    
+    let can_delete_company = role_system.has_permission(&warehouse_id, &company_id, &ResourceType::Company, &ActionType::Delete);
+    println!("      Warehouse can delete company: {}", can_delete_company);
+    
+    // Grant custom permission
+    role_system.grant_custom_permission(
+        company_id.clone(),
+        warehouse_id.clone(),
+        ResourceType::Reports,
+        ActionType::Export,
+        owner_id.clone(),
+    ).expect("Failed to grant custom permission");
+    
+    println!("   ➕ Custom permission granted: Warehouse can export reports");
+    
+    // Test custom permission
+    let can_export_reports = role_system.has_permission(&warehouse_id, &company_id, &ResourceType::Reports, &ActionType::Export);
+    println!("      Warehouse can export reports (custom): {}", can_export_reports);
+    
+    // Get all user permissions
+    let manager_permissions = role_system.get_user_permissions(&company_id, &manager_id);
+    println!("   📋 Manager has {} permissions", manager_permissions.len());
+    
+    // Get users with specific role
+    let managers = role_system.get_users_with_role(&company_id, &UserRole::Manager);
+    println!("   👥 Users with Manager role: {}", managers.len());
+    
+    // Test permission denial
+    let can_transfer_ownership = role_system.has_permission(&manager_id, &company_id, &ResourceType::Company, &ActionType::Transfer);
+    println!("      Manager can transfer ownership: {}", can_transfer_ownership);
+    
+    // Get audit logs
+    let owner_logs = role_system.get_user_audit_logs(&owner_id);
+    println!("   📊 Owner audit log entries: {}", owner_logs.len());
+    
+    let company_logs = role_system.get_company_audit_logs(&company_id);
+    println!("   📊 Company audit log entries: {}", company_logs.len());
+    
+    // Revoke custom permission
+    role_system.revoke_custom_permission(
+        company_id.clone(),
+        warehouse_id.clone(),
+        ResourceType::Reports,
+        ActionType::Export,
+        owner_id.clone(),
+    ).expect("Failed to revoke custom permission");
+    
+    println!("   ➖ Custom permission revoked");
+    
+    // Test revoked permission
+    let can_still_export = role_system.has_permission(&warehouse_id, &company_id, &ResourceType::Reports, &ActionType::Export);
+    println!("      Warehouse can still export reports: {}", can_still_export);
+    
+    // Get permission statistics
+    let stats = role_system.get_permission_stats();
+    println!("   📈 Permission Statistics:");
+    println!("      - Role Assignments: {}", stats.total_role_assignments);
+    println!("      - Custom Permissions: {}", stats.total_custom_permissions);
+    println!("      - Audit Entries: {}", stats.total_audit_entries);
+    println!("      - Granted Permissions: {}", stats.granted_permissions);
+    println!("      - Denied Permissions: {}", stats.denied_permissions);
+    
+    // Test different role capabilities
+    println!("\n   🎭 Role Capability Summary:");
+    
+    let roles = [
+        (&owner_id, "Owner"),
+        (&manager_id, "Manager"),
+        (&warehouse_id, "Warehouse"),
+    ];
+    
+    for (user_id, role_name) in roles.iter() {
+        let permissions = role_system.get_user_permissions(&company_id, user_id);
+        let can_create_products = role_system.has_permission(user_id, &company_id, &ResourceType::Product, &ActionType::Create);
+        let can_manage_users = role_system.has_permission(user_id, &company_id, &ResourceType::User, &ActionType::Manage);
+        let can_read_reports = role_system.has_permission(user_id, &company_id, &ResourceType::Reports, &ActionType::Read);
+        
+        println!("      {} ({}): {} perms, Products: {}, Users: {}, Reports: {}", 
+                 role_name, user_id, permissions.len(), can_create_products, can_manage_users, can_read_reports);
+    }
+    
+    println!("   ✅ Role & Permissions system working correctly!");
 }
