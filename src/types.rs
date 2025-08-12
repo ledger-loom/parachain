@@ -61,17 +61,18 @@ pub struct Product {
     pub category: String,
     pub company_id: String,
     pub attributes: HashMap<String, String>,
+    pub status: ProductStatus,
+    pub price: Option<f64>,
     pub created_at: u64,
     pub updated_at: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum ProductStatus {
-    Created,
-    Manufactured,
-    InTransit,
-    Delivered,
-    Returned,
+    Active,
+    Inactive,
+    Discontinued,
+    Draft,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

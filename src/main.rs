@@ -93,6 +93,8 @@ fn demo_core_structures() {
             attrs.insert("certification".to_string(), "Organic".to_string());
             attrs
         },
+        status: ProductStatus::Active,
+        price: Some(25.50),
         created_at: 1640995200,
         updated_at: 1640995200,
     };
@@ -102,7 +104,7 @@ fn demo_core_structures() {
     let supply_entry = SupplyChainEntry {
         id: "entry_001".to_string(),
         product_id: product.id.clone(),
-        status: ProductStatus::Manufactured,
+        status: ProductStatus::Active,
         location: Location {
             name: "Coffee Processing Plant".to_string(),
             address: "Addis Ababa, Ethiopia".to_string(),

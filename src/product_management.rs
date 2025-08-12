@@ -1,5 +1,6 @@
 use crate::types::*;
 use crate::role_permissions::*;
+use crate::supply_chain_tracking::{SortOrder};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -98,6 +99,119 @@ pub struct ProductSearchFilter {
     pub attributes: HashMap<String, String>,
     pub created_after: Option<u64>,
     pub created_before: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdvancedProductSearchFilter {
+    // Basic filters
+    pub company_ids: Option<Vec<String>>,
+    pub category_ids: Option<Vec<String>>,
+    pub product_ids: Option<Vec<String>>,
+    
+    // Text search
+    pub search_text: Option<String>,
+    pub search_in_description: bool,
+    pub search_in_attributes: bool,
+    
+    // Product filters
+    pub name_contains: Option<String>,
+    pub description_contains: Option<String>,
+    pub status: Option<ProductStatus>,
+    pub min_price: Option<f64>,
+    pub max_price: Option<f64>,
+    
+    // Attribute filters
+    pub attribute_filters: HashMap<String, AttributeFilter>,
+    
+    // Date filters
+    pub created_after: Option<u64>,
+    pub created_before: Option<u64>,
+    pub updated_after: Option<u64>,
+    pub updated_before: Option<u64>,
+    
+    // Category filters
+    pub category_path_contains: Option<String>,
+    pub include_subcategories: bool,
+    
+    // Template and batch filters
+    pub has_template: Option<bool>,
+    pub template_id: Option<String>,
+    pub has_batches: Option<bool>,
+    pub batch_status: Option<BatchStatus>,
+    
+    // Pagination and sorting
+    pub page: Option<u32>,
+    pub page_size: Option<u32>,
+    pub sort_by: Option<ProductSortField>,
+    pub sort_order: Option<SortOrder>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AttributeFilter {
+    Equals(String),
+    Contains(String),
+    GreaterThan(f64),
+    LessThan(f64),
+    Between(f64, f64),
+    OneOf(Vec<String>),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ProductSortField {
+    Name,
+    CreatedAt,
+    UpdatedAt,
+    Price,
+    Category,
+    Company,
+    BatchCount,
+    Status,
+}
+
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchSearchFilter {
+    pub product_ids: Option<Vec<String>>,
+    pub batch_numbers: Option<Vec<String>>,
+    pub statuses: Option<Vec<BatchStatus>>,
+    pub manufacturing_after: Option<u64>,
+    pub manufacturing_before: Option<u64>,
+    pub expiry_after: Option<u64>,
+    pub expiry_before: Option<u64>,
+    pub min_quantity: Option<u32>,
+    pub max_quantity: Option<u32>,
+    pub quality_filters: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CategorySearchFilter {
+    pub company_ids: Option<Vec<String>>,
+    pub name_contains: Option<String>,
+    pub description_contains: Option<String>,
+    pub parent_category_id: Option<String>,
+    pub has_subcategories: Option<bool>,
+    pub has_products: Option<bool>,
+    pub created_after: Option<u64>,
+    pub created_before: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProductSearchResult<T> {
+    pub items: Vec<T>,
+    pub total_count: usize,
+    pub page: u32,
+    pub page_size: u32,
+    pub total_pages: u32,
+    pub facets: SearchFacets,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchFacets {
+    pub categories: HashMap<String, usize>,
+    pub companies: HashMap<String, usize>,
+    pub statuses: HashMap<String, usize>,
+    pub attribute_values: HashMap<String, HashMap<String, usize>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -244,6 +358,8 @@ impl ProductManagement {
             category: category_id.clone(),
             company_id: company_id.clone(),
             attributes,
+            status: ProductStatus::Active,
+            price: None,
             created_at: current_time,
             updated_at: current_time,
         };
@@ -692,6 +808,538 @@ impl ProductManagement {
                 .filter(|template| template.company_id == company_id)
                 .count(),
         }
+    }
+
+    // Advanced product search with comprehensive filtering, sorting, and pagination
+    pub fn advanced_search_products(
+        &mut self,
+        user_id: String,
+        company_id: String,
+        filter: AdvancedProductSearchFilter,
+    ) -> Result<ProductSearchResult<Product>, ProductManagementError> {
+        // Check permissions
+        if !self.role_system.has_permission(&user_id, &company_id, &ResourceType::Product, &ActionType::Read) {
+            return Err(ProductManagementError::InsufficientPermissions);
+        }
+
+        let mut results: Vec<Product> = self.products.values()
+            .filter(|product| self.apply_advanced_product_filters(product, &filter))
+            .cloned()
+            .collect();
+
+        // Apply sorting
+        self.sort_products(&mut results, &filter);
+
+        let total_count = results.len();
+        let page = filter.page.unwrap_or(1);
+        let page_size = filter.page_size.unwrap_or(50);
+        let total_pages = (total_count as f64 / page_size as f64).ceil() as u32;
+
+        // Calculate facets before pagination
+        let facets = self.calculate_product_facets(&results);
+
+        // Apply pagination
+        let start_index = ((page - 1) * page_size) as usize;
+        let end_index = (start_index + page_size as usize).min(total_count);
+        let paginated_results = results[start_index..end_index].to_vec();
+
+        Ok(ProductSearchResult {
+            items: paginated_results,
+            total_count,
+            page,
+            page_size,
+            total_pages,
+            facets,
+        })
+    }
+
+    // Apply advanced filters to a product
+    fn apply_advanced_product_filters(&self, product: &Product, filter: &AdvancedProductSearchFilter) -> bool {
+        // Basic ID filters
+        if let Some(ref company_ids) = filter.company_ids {
+            if !company_ids.contains(&product.company_id) {
+                return false;
+            }
+        }
+
+        if let Some(ref category_ids) = filter.category_ids {
+            if !category_ids.contains(&product.category) {
+                return false;
+            }
+        }
+
+        if let Some(ref product_ids) = filter.product_ids {
+            if !product_ids.contains(&product.id) {
+                return false;
+            }
+        }
+
+        // Text search
+        if let Some(ref search_text) = filter.search_text {
+            let search_text_lower = search_text.to_lowercase();
+            let mut found = false;
+
+            // Search in product name
+            if product.name.to_lowercase().contains(&search_text_lower) {
+                found = true;
+            }
+
+            // Search in product ID
+            if product.id.to_lowercase().contains(&search_text_lower) {
+                found = true;
+            }
+
+            // Search in description if enabled
+            if filter.search_in_description && product.description.to_lowercase().contains(&search_text_lower) {
+                found = true;
+            }
+
+            // Search in attributes if enabled
+            if filter.search_in_attributes {
+                for (key, value) in &product.attributes {
+                    if key.to_lowercase().contains(&search_text_lower) ||
+                       value.to_lowercase().contains(&search_text_lower) {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+
+            if !found {
+                return false;
+            }
+        }
+
+        // Name contains filter
+        if let Some(ref name_filter) = filter.name_contains {
+            if !product.name.to_lowercase().contains(&name_filter.to_lowercase()) {
+                return false;
+            }
+        }
+
+        // Description contains filter
+        if let Some(ref desc_filter) = filter.description_contains {
+            if !product.description.to_lowercase().contains(&desc_filter.to_lowercase()) {
+                return false;
+            }
+        }
+
+        // Status filter
+        if let Some(ref status) = filter.status {
+            if product.status != *status {
+                return false;
+            }
+        }
+
+        // Price filters
+        if let Some(min_price) = filter.min_price {
+            if let Some(price) = product.price {
+                if price < min_price {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        if let Some(max_price) = filter.max_price {
+            if let Some(price) = product.price {
+                if price > max_price {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // Advanced attribute filters
+        for (attr_name, attr_filter) in &filter.attribute_filters {
+            if let Some(attr_value) = product.attributes.get(attr_name) {
+                if !self.matches_attribute_filter(attr_value, attr_filter) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // Date filters
+        if let Some(created_after) = filter.created_after {
+            if product.created_at < created_after {
+                return false;
+            }
+        }
+
+        if let Some(created_before) = filter.created_before {
+            if product.created_at > created_before {
+                return false;
+            }
+        }
+
+        if let Some(updated_after) = filter.updated_after {
+            if product.updated_at < updated_after {
+                return false;
+            }
+        }
+
+        if let Some(updated_before) = filter.updated_before {
+            if product.updated_at > updated_before {
+                return false;
+            }
+        }
+
+        // Category path filter
+        if let Some(ref category_path) = filter.category_path_contains {
+            if let Some(category) = self.categories.get(&product.category) {
+                let full_path = self.get_category_path(&category.id);
+                if !full_path.to_lowercase().contains(&category_path.to_lowercase()) {
+                    return false;
+                }
+            }
+        }
+
+        // Template filter
+        if let Some(has_template) = filter.has_template {
+            let product_has_template = self.product_templates.values()
+                .any(|template| template.company_id == product.company_id);
+            if has_template != product_has_template {
+                return false;
+            }
+        }
+
+        if let Some(ref template_id) = filter.template_id {
+            if let Some(template) = self.product_templates.get(template_id) {
+                if template.company_id != product.company_id {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // Batch filters
+        if let Some(has_batches) = filter.has_batches {
+            let product_has_batches = self.product_batches.values()
+                .any(|batch| batch.product_id == product.id);
+            if has_batches != product_has_batches {
+                return false;
+            }
+        }
+
+        if let Some(ref batch_status) = filter.batch_status {
+            let has_matching_batch = self.product_batches.values()
+                .any(|batch| batch.product_id == product.id && batch.status == *batch_status);
+            if !has_matching_batch {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    // Check if attribute value matches the filter
+    fn matches_attribute_filter(&self, value: &str, filter: &AttributeFilter) -> bool {
+        match filter {
+            AttributeFilter::Equals(expected) => value == expected,
+            AttributeFilter::Contains(substring) => value.to_lowercase().contains(&substring.to_lowercase()),
+            AttributeFilter::GreaterThan(threshold) => {
+                if let Ok(num_value) = value.parse::<f64>() {
+                    num_value > *threshold
+                } else {
+                    false
+                }
+            },
+            AttributeFilter::LessThan(threshold) => {
+                if let Ok(num_value) = value.parse::<f64>() {
+                    num_value < *threshold
+                } else {
+                    false
+                }
+            },
+            AttributeFilter::Between(min, max) => {
+                if let Ok(num_value) = value.parse::<f64>() {
+                    num_value >= *min && num_value <= *max
+                } else {
+                    false
+                }
+            },
+            AttributeFilter::OneOf(options) => options.contains(&value.to_string()),
+        }
+    }
+
+    // Get full category path
+    fn get_category_path(&self, category_id: &str) -> String {
+        if let Some(category) = self.categories.get(category_id) {
+            if let Some(ref parent_id) = category.parent_category_id {
+                format!("{} > {}", self.get_category_path(parent_id), category.name)
+            } else {
+                category.name.clone()
+            }
+        } else {
+            "Unknown".to_string()
+        }
+    }
+
+    // Sort products based on the specified criteria
+    fn sort_products(&self, products: &mut Vec<Product>, filter: &AdvancedProductSearchFilter) {
+        if let Some(ref sort_field) = filter.sort_by {
+            let ascending = matches!(filter.sort_order, Some(SortOrder::Ascending));
+
+            products.sort_by(|a, b| {
+                let comparison = match sort_field {
+                    ProductSortField::Name => a.name.cmp(&b.name),
+                    ProductSortField::CreatedAt => a.created_at.cmp(&b.created_at),
+                    ProductSortField::UpdatedAt => a.updated_at.cmp(&b.updated_at),
+                    ProductSortField::Price => {
+                        let price_a = a.price.unwrap_or(0.0);
+                        let price_b = b.price.unwrap_or(0.0);
+                        price_a.partial_cmp(&price_b).unwrap_or(std::cmp::Ordering::Equal)
+                    },
+                    ProductSortField::Category => a.category.cmp(&b.category),
+                    ProductSortField::Company => a.company_id.cmp(&b.company_id),
+                    ProductSortField::BatchCount => {
+                        let count_a = self.get_batch_count(&a.id);
+                        let count_b = self.get_batch_count(&b.id);
+                        count_a.cmp(&count_b)
+                    },
+                    ProductSortField::Status => format!("{:?}", a.status).cmp(&format!("{:?}", b.status)),
+                };
+
+                if ascending { comparison } else { comparison.reverse() }
+            });
+        }
+    }
+
+    // Get batch count for a product
+    fn get_batch_count(&self, product_id: &str) -> usize {
+        self.product_batches.values()
+            .filter(|batch| batch.product_id == product_id)
+            .count()
+    }
+
+    // Calculate search facets
+    fn calculate_product_facets(&self, products: &[Product]) -> SearchFacets {
+        let mut categories = HashMap::new();
+        let mut companies = HashMap::new();
+        let mut statuses = HashMap::new();
+        let mut attribute_values = HashMap::new();
+
+        for product in products {
+            // Count categories
+            *categories.entry(product.category.clone()).or_insert(0) += 1;
+
+            // Count companies
+            *companies.entry(product.company_id.clone()).or_insert(0) += 1;
+
+            // Count statuses
+            *statuses.entry(format!("{:?}", product.status)).or_insert(0) += 1;
+
+            // Count attribute values
+            for (attr_name, attr_value) in &product.attributes {
+                let attr_map = attribute_values.entry(attr_name.clone()).or_insert_with(HashMap::new);
+                *attr_map.entry(attr_value.clone()).or_insert(0) += 1;
+            }
+        }
+
+        SearchFacets {
+            categories,
+            companies,
+            statuses,
+            attribute_values,
+        }
+    }
+
+    // Search batches with advanced filtering
+    pub fn search_batches(
+        &mut self,
+        user_id: String,
+        company_id: String,
+        filter: BatchSearchFilter,
+    ) -> Result<Vec<ProductBatch>, ProductManagementError> {
+        // Check permissions
+        if !self.role_system.has_permission(&user_id, &company_id, &ResourceType::Product, &ActionType::Read) {
+            return Err(ProductManagementError::InsufficientPermissions);
+        }
+
+        let results: Vec<ProductBatch> = self.product_batches.values()
+            .filter(|batch| {
+                // Check if batch belongs to a product owned by the user's company
+                if let Some(product) = self.products.get(&batch.product_id) {
+                    if product.company_id != company_id {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+
+                // Product ID filter
+                if let Some(ref product_ids) = filter.product_ids {
+                    if !product_ids.contains(&batch.product_id) {
+                        return false;
+                    }
+                }
+
+                // Batch number filter
+                if let Some(ref batch_numbers) = filter.batch_numbers {
+                    if !batch_numbers.contains(&batch.batch_number) {
+                        return false;
+                    }
+                }
+
+                // Status filter
+                if let Some(ref statuses) = filter.statuses {
+                    if !statuses.contains(&batch.status) {
+                        return false;
+                    }
+                }
+
+                // Manufacturing date filters
+                if let Some(manufacturing_after) = filter.manufacturing_after {
+                    if batch.manufacturing_date < manufacturing_after {
+                        return false;
+                    }
+                }
+
+                if let Some(manufacturing_before) = filter.manufacturing_before {
+                    if batch.manufacturing_date > manufacturing_before {
+                        return false;
+                    }
+                }
+
+                // Expiry date filters
+                if let Some(expiry_after) = filter.expiry_after {
+                    if let Some(expiry) = batch.expiry_date {
+                        if expiry < expiry_after {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+
+                if let Some(expiry_before) = filter.expiry_before {
+                    if let Some(expiry) = batch.expiry_date {
+                        if expiry > expiry_before {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+
+                // Quantity filters
+                if let Some(min_quantity) = filter.min_quantity {
+                    if batch.quantity < min_quantity {
+                        return false;
+                    }
+                }
+
+                if let Some(max_quantity) = filter.max_quantity {
+                    if batch.quantity > max_quantity {
+                        return false;
+                    }
+                }
+
+                // Quality metric filters
+                for (key, expected_value) in &filter.quality_filters {
+                    if let Some(actual_value) = batch.quality_metrics.get(key) {
+                        if actual_value != expected_value {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+
+                true
+            })
+            .cloned()
+            .collect();
+
+        Ok(results)
+    }
+
+    // Search categories with advanced filtering
+    pub fn search_categories(
+        &mut self,
+        user_id: String,
+        company_id: String,
+        filter: CategorySearchFilter,
+    ) -> Result<Vec<ProductCategory>, ProductManagementError> {
+        // Check permissions
+        if !self.role_system.has_permission(&user_id, &company_id, &ResourceType::Product, &ActionType::Read) {
+            return Err(ProductManagementError::InsufficientPermissions);
+        }
+
+        let results: Vec<ProductCategory> = self.categories.values()
+            .filter(|category| {
+                // Company filter
+                if let Some(ref company_ids) = filter.company_ids {
+                    if !company_ids.contains(&category.company_id) {
+                        return false;
+                    }
+                } else if category.company_id != company_id {
+                    return false;
+                }
+
+                // Name contains filter
+                if let Some(ref name_filter) = filter.name_contains {
+                    if !category.name.to_lowercase().contains(&name_filter.to_lowercase()) {
+                        return false;
+                    }
+                }
+
+                // Description contains filter
+                if let Some(ref desc_filter) = filter.description_contains {
+                    if !category.description.to_lowercase().contains(&desc_filter.to_lowercase()) {
+                        return false;
+                    }
+                }
+
+                // Parent category filter
+                if let Some(ref parent_id) = filter.parent_category_id {
+                    if category.parent_category_id.as_ref() != Some(parent_id) {
+                        return false;
+                    }
+                }
+
+                // Has subcategories filter
+                if let Some(has_subcategories) = filter.has_subcategories {
+                    let category_has_subcategories = !category.subcategories.is_empty();
+                    if has_subcategories != category_has_subcategories {
+                        return false;
+                    }
+                }
+
+                // Has products filter
+                if let Some(has_products) = filter.has_products {
+                    let category_has_products = self.category_products.get(&category.id)
+                        .map(|products| !products.is_empty())
+                        .unwrap_or(false);
+                    if has_products != category_has_products {
+                        return false;
+                    }
+                }
+
+                // Date filters
+                if let Some(created_after) = filter.created_after {
+                    if category.created_at < created_after {
+                        return false;
+                    }
+                }
+
+                if let Some(created_before) = filter.created_before {
+                    if category.created_at > created_before {
+                        return false;
+                    }
+                }
+
+                true
+            })
+            .cloned()
+            .collect();
+
+        Ok(results)
     }
 }
 

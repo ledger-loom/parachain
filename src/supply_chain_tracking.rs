@@ -219,6 +219,109 @@ pub struct TrackingQuery {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdvancedSearchFilter {
+    // Basic filters
+    pub product_ids: Option<Vec<String>>,
+    pub company_ids: Option<Vec<String>>,
+    pub statuses: Option<Vec<TrackingStatus>>,
+    pub location_types: Option<Vec<LocationType>>,
+    pub operator_ids: Option<Vec<String>>,
+    pub shipment_ids: Option<Vec<String>>,
+    
+    // Text search
+    pub search_text: Option<String>,
+    pub search_in_notes: bool,
+    pub search_in_metadata: bool,
+    
+    // Date filters
+    pub created_after: Option<u64>,
+    pub created_before: Option<u64>,
+    pub delivered_after: Option<u64>,
+    pub delivered_before: Option<u64>,
+    
+    // Location filters
+    pub origin_location: Option<String>,
+    pub destination_location: Option<String>,
+    pub current_location: Option<String>,
+    pub location_name_contains: Option<String>,
+    
+    // Environmental data filters
+    pub min_temperature: Option<f64>,
+    pub max_temperature: Option<f64>,
+    pub min_humidity: Option<f64>,
+    pub max_humidity: Option<f64>,
+    
+    // Journey filters
+    pub min_journey_duration: Option<u64>,
+    pub max_journey_duration: Option<u64>,
+    pub has_delays: Option<bool>,
+    pub companies_involved: Option<Vec<String>>,
+    
+    // Metadata filters
+    pub metadata_filters: HashMap<String, String>,
+    pub has_documents: Option<bool>,
+    pub document_types: Option<Vec<String>>,
+    
+    // Pagination and sorting
+    pub page: Option<u32>,
+    pub page_size: Option<u32>,
+    pub sort_by: Option<SortField>,
+    pub sort_order: Option<SortOrder>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SortField {
+    Timestamp,
+    ProductId,
+    Status,
+    Location,
+    Operator,
+    Company,
+    Temperature,
+    Humidity,
+    JourneyDuration,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SortOrder {
+    Ascending,
+    Descending,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchResult<T> {
+    pub items: Vec<T>,
+    pub total_count: usize,
+    pub page: u32,
+    pub page_size: u32,
+    pub total_pages: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocationSearchFilter {
+    pub name_contains: Option<String>,
+    pub location_types: Option<Vec<LocationType>>,
+    pub company_id: Option<String>,
+    pub has_contact_info: Option<bool>,
+    pub city: Option<String>,
+    pub country: Option<String>,
+    pub timezone: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShipmentSearchFilter {
+    pub carrier_company_ids: Option<Vec<String>>,
+    pub destination_company_ids: Option<Vec<String>>,
+    pub statuses: Option<Vec<ShipmentStatus>>,
+    pub priority_levels: Option<Vec<String>>,
+    pub created_after: Option<u64>,
+    pub created_before: Option<u64>,
+    pub estimated_delivery_after: Option<u64>,
+    pub estimated_delivery_before: Option<u64>,
+    pub route_contains_location: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SupplyChainTrackingError {
     ProductNotFound,
     LocationNotFound,
@@ -759,6 +862,530 @@ impl SupplyChainTracking {
             total_notifications,
         }
     }
+
+    // Advanced search for tracking entries with full filtering, sorting, and pagination
+    pub fn advanced_search_tracking_entries(
+        &mut self,
+        user_id: String,
+        company_id: String,
+        filter: AdvancedSearchFilter,
+    ) -> Result<SearchResult<TrackingEntry>, SupplyChainTrackingError> {
+        // Check permissions
+        if !self.role_system.has_permission(&user_id, &company_id, &ResourceType::SupplyChain, &ActionType::Read) {
+            return Err(SupplyChainTrackingError::InsufficientPermissions);
+        }
+
+        let mut results: Vec<TrackingEntry> = self.tracking_entries.values()
+            .filter(|entry| self.apply_advanced_filters(entry, &filter))
+            .cloned()
+            .collect();
+
+        // Apply sorting
+        self.sort_tracking_entries(&mut results, &filter);
+
+        let total_count = results.len();
+        let page = filter.page.unwrap_or(1);
+        let page_size = filter.page_size.unwrap_or(50);
+        let total_pages = (total_count as f64 / page_size as f64).ceil() as u32;
+
+        // Apply pagination
+        let start_index = ((page - 1) * page_size) as usize;
+        let end_index = (start_index + page_size as usize).min(total_count);
+        let paginated_results = results[start_index..end_index].to_vec();
+
+        Ok(SearchResult {
+            items: paginated_results,
+            total_count,
+            page,
+            page_size,
+            total_pages,
+        })
+    }
+
+    // Apply advanced filters to a tracking entry
+    fn apply_advanced_filters(&self, entry: &TrackingEntry, filter: &AdvancedSearchFilter) -> bool {
+        // Basic ID filters
+        if let Some(ref product_ids) = filter.product_ids {
+            if !product_ids.contains(&entry.product_id) {
+                return false;
+            }
+        }
+
+        if let Some(ref company_ids) = filter.company_ids {
+            if !company_ids.contains(&entry.company_id) {
+                return false;
+            }
+        }
+
+        if let Some(ref statuses) = filter.statuses {
+            if !statuses.contains(&entry.status) {
+                return false;
+            }
+        }
+
+        if let Some(ref location_types) = filter.location_types {
+            if !location_types.contains(&entry.location.location_type) {
+                return false;
+            }
+        }
+
+        if let Some(ref operator_ids) = filter.operator_ids {
+            if !operator_ids.contains(&entry.operator_id) {
+                return false;
+            }
+        }
+
+        if let Some(ref shipment_ids) = filter.shipment_ids {
+            if let Some(ref entry_shipment_id) = entry.shipment_id {
+                if !shipment_ids.contains(entry_shipment_id) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // Text search
+        if let Some(ref search_text) = filter.search_text {
+            let search_text_lower = search_text.to_lowercase();
+            let mut found = false;
+
+            // Search in product ID
+            if entry.product_id.to_lowercase().contains(&search_text_lower) {
+                found = true;
+            }
+
+            // Search in location name and address
+            if entry.location.name.to_lowercase().contains(&search_text_lower) ||
+               entry.location.address.to_lowercase().contains(&search_text_lower) {
+                found = true;
+            }
+
+            // Search in notes if enabled
+            if filter.search_in_notes {
+                if let Some(ref notes) = entry.notes {
+                    if notes.to_lowercase().contains(&search_text_lower) {
+                        found = true;
+                    }
+                }
+            }
+
+            // Search in metadata if enabled
+            if filter.search_in_metadata {
+                for (key, value) in &entry.metadata {
+                    if key.to_lowercase().contains(&search_text_lower) ||
+                       value.to_lowercase().contains(&search_text_lower) {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+
+            if !found {
+                return false;
+            }
+        }
+
+        // Date filters
+        if let Some(created_after) = filter.created_after {
+            if entry.timestamp < created_after {
+                return false;
+            }
+        }
+
+        if let Some(created_before) = filter.created_before {
+            if entry.timestamp > created_before {
+                return false;
+            }
+        }
+
+        // Location filters
+        if let Some(ref location_name) = filter.location_name_contains {
+            if !entry.location.name.to_lowercase().contains(&location_name.to_lowercase()) {
+                return false;
+            }
+        }
+
+        // Environmental data filters
+        if let Some(ref env_data) = entry.environmental_data {
+            if let Some(min_temp) = filter.min_temperature {
+                if let Some(temp) = env_data.temperature {
+                    if temp < min_temp {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+
+            if let Some(max_temp) = filter.max_temperature {
+                if let Some(temp) = env_data.temperature {
+                    if temp > max_temp {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+
+            if let Some(min_humidity) = filter.min_humidity {
+                if let Some(humidity) = env_data.humidity {
+                    if humidity < min_humidity {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+
+            if let Some(max_humidity) = filter.max_humidity {
+                if let Some(humidity) = env_data.humidity {
+                    if humidity > max_humidity {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+        } else {
+            // If no environmental data but filters are set, exclude entry
+            if filter.min_temperature.is_some() || filter.max_temperature.is_some() ||
+               filter.min_humidity.is_some() || filter.max_humidity.is_some() {
+                return false;
+            }
+        }
+
+        // Metadata filters
+        for (key, expected_value) in &filter.metadata_filters {
+            if let Some(actual_value) = entry.metadata.get(key) {
+                if actual_value != expected_value {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // Document filters
+        if let Some(has_documents) = filter.has_documents {
+            let entry_has_documents = !entry.documents.is_empty();
+            if has_documents != entry_has_documents {
+                return false;
+            }
+        }
+
+        if let Some(ref document_types) = filter.document_types {
+            let entry_document_types: Vec<String> = entry.documents.iter()
+                .map(|doc| format!("{:?}", doc.document_type))
+                .collect();
+            
+            let has_required_type = document_types.iter()
+                .any(|doc_type| entry_document_types.contains(doc_type));
+            
+            if !has_required_type {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    // Sort tracking entries based on the specified criteria
+    fn sort_tracking_entries(&self, entries: &mut Vec<TrackingEntry>, filter: &AdvancedSearchFilter) {
+        if let Some(ref sort_field) = filter.sort_by {
+            let ascending = matches!(filter.sort_order, Some(SortOrder::Ascending));
+
+            entries.sort_by(|a, b| {
+                let comparison = match sort_field {
+                    SortField::Timestamp => a.timestamp.cmp(&b.timestamp),
+                    SortField::ProductId => a.product_id.cmp(&b.product_id),
+                    SortField::Status => format!("{:?}", a.status).cmp(&format!("{:?}", b.status)),
+                    SortField::Location => a.location.name.cmp(&b.location.name),
+                    SortField::Operator => a.operator_id.cmp(&b.operator_id),
+                    SortField::Company => a.company_id.cmp(&b.company_id),
+                    SortField::Temperature => {
+                        let temp_a = a.environmental_data.as_ref()
+                            .and_then(|e| e.temperature)
+                            .unwrap_or(0.0);
+                        let temp_b = b.environmental_data.as_ref()
+                            .and_then(|e| e.temperature)
+                            .unwrap_or(0.0);
+                        temp_a.partial_cmp(&temp_b).unwrap_or(std::cmp::Ordering::Equal)
+                    },
+                    SortField::Humidity => {
+                        let humidity_a = a.environmental_data.as_ref()
+                            .and_then(|e| e.humidity)
+                            .unwrap_or(0.0);
+                        let humidity_b = b.environmental_data.as_ref()
+                            .and_then(|e| e.humidity)
+                            .unwrap_or(0.0);
+                        humidity_a.partial_cmp(&humidity_b).unwrap_or(std::cmp::Ordering::Equal)
+                    },
+                    SortField::JourneyDuration => {
+                        // Calculate journey duration by looking at product journey
+                        let duration_a = self.calculate_journey_duration(&a.product_id);
+                        let duration_b = self.calculate_journey_duration(&b.product_id);
+                        duration_a.cmp(&duration_b)
+                    },
+                };
+
+                if ascending { comparison } else { comparison.reverse() }
+            });
+        }
+    }
+
+    // Helper method to calculate journey duration
+    fn calculate_journey_duration(&self, product_id: &str) -> u64 {
+        if let Some(journey) = self.product_journeys.get(product_id) {
+            if let Some(delivered_at) = journey.actual_delivery {
+                delivered_at.saturating_sub(journey.started_at)
+            } else {
+                // Use current time if not delivered yet
+                let current_time = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                current_time.saturating_sub(journey.started_at)
+            }
+        } else {
+            0
+        }
+    }
+
+    // Search locations with advanced filtering
+    pub fn search_locations(
+        &mut self,
+        user_id: String,
+        company_id: String,
+        filter: LocationSearchFilter,
+    ) -> Result<Vec<LocationInfo>, SupplyChainTrackingError> {
+        // Check permissions
+        if !self.role_system.has_permission(&user_id, &company_id, &ResourceType::SupplyChain, &ActionType::Read) {
+            return Err(SupplyChainTrackingError::InsufficientPermissions);
+        }
+
+        let results: Vec<LocationInfo> = self.location_registry.values()
+            .filter(|location| {
+                // Company filter
+                if let Some(ref filter_company_id) = filter.company_id {
+                    if location.company_id.as_ref() != Some(filter_company_id) {
+                        return false;
+                    }
+                }
+
+                // Name contains filter
+                if let Some(ref name_filter) = filter.name_contains {
+                    if !location.name.to_lowercase().contains(&name_filter.to_lowercase()) {
+                        return false;
+                    }
+                }
+
+                // Location types filter
+                if let Some(ref types) = filter.location_types {
+                    if !types.contains(&location.location_type) {
+                        return false;
+                    }
+                }
+
+                // Contact info filter
+                if let Some(has_contact) = filter.has_contact_info {
+                    let location_has_contact = location.contact_info.is_some();
+                    if has_contact != location_has_contact {
+                        return false;
+                    }
+                }
+
+                // City filter (extract from address)
+                if let Some(ref city) = filter.city {
+                    if !location.address.to_lowercase().contains(&city.to_lowercase()) {
+                        return false;
+                    }
+                }
+
+                // Timezone filter
+                if let Some(ref timezone) = filter.timezone {
+                    if location.timezone != *timezone {
+                        return false;
+                    }
+                }
+
+                true
+            })
+            .cloned()
+            .collect();
+
+        Ok(results)
+    }
+
+    // Search shipments with advanced filtering
+    pub fn search_shipments(
+        &mut self,
+        user_id: String,
+        company_id: String,
+        filter: ShipmentSearchFilter,
+    ) -> Result<Vec<Shipment>, SupplyChainTrackingError> {
+        // Check permissions
+        if !self.role_system.has_permission(&user_id, &company_id, &ResourceType::SupplyChain, &ActionType::Read) {
+            return Err(SupplyChainTrackingError::InsufficientPermissions);
+        }
+
+        let results: Vec<Shipment> = self.shipments.values()
+            .filter(|shipment| {
+                // Carrier company filter
+                if let Some(ref carrier_companies) = filter.carrier_company_ids {
+                    if !carrier_companies.contains(&shipment.carrier_company_id) {
+                        return false;
+                    }
+                }
+
+                // Destination company filter
+                if let Some(ref dest_companies) = filter.destination_company_ids {
+                    if let Some(ref dest_company_id) = shipment.destination.company_id {
+                        if !dest_companies.contains(dest_company_id) {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+
+                // Status filter
+                if let Some(ref statuses) = filter.statuses {
+                    if !statuses.contains(&shipment.status) {
+                        return false;
+                    }
+                }
+
+                // Created date filters
+                if let Some(created_after) = filter.created_after {
+                    if shipment.created_at < created_after {
+                        return false;
+                    }
+                }
+
+                if let Some(created_before) = filter.created_before {
+                    if shipment.created_at > created_before {
+                        return false;
+                    }
+                }
+
+                // Estimated delivery filters
+                if let Some(delivery_after) = filter.estimated_delivery_after {
+                    if let Some(estimated) = shipment.estimated_delivery {
+                        if estimated < delivery_after {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+
+                if let Some(delivery_before) = filter.estimated_delivery_before {
+                    if let Some(estimated) = shipment.estimated_delivery {
+                        if estimated > delivery_before {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+
+                // Route contains location filter
+                if let Some(ref location_name) = filter.route_contains_location {
+                    let route_contains = shipment.route.iter()
+                        .any(|location_id| {
+                            if let Some(location) = self.location_registry.get(location_id) {
+                                location.name.to_lowercase().contains(&location_name.to_lowercase())
+                            } else {
+                                false
+                            }
+                        });
+                    
+                    if !route_contains {
+                        return false;
+                    }
+                }
+
+                true
+            })
+            .cloned()
+            .collect();
+
+        Ok(results)
+    }
+
+    // Get aggregated search statistics
+    pub fn get_search_statistics(
+        &mut self,
+        user_id: String,
+        company_id: String,
+        filter: AdvancedSearchFilter,
+    ) -> Result<SearchStatistics, SupplyChainTrackingError> {
+        // Check permissions
+        if !self.role_system.has_permission(&user_id, &company_id, &ResourceType::SupplyChain, &ActionType::Read) {
+            return Err(SupplyChainTrackingError::InsufficientPermissions);
+        }
+
+        let filtered_entries: Vec<&TrackingEntry> = self.tracking_entries.values()
+            .filter(|entry| self.apply_advanced_filters(entry, &filter))
+            .collect();
+
+        let total_entries = filtered_entries.len();
+        let unique_products = filtered_entries.iter()
+            .map(|entry| entry.product_id.clone())
+            .collect::<std::collections::HashSet<_>>()
+            .len();
+
+        let unique_companies = filtered_entries.iter()
+            .map(|entry| entry.company_id.clone())
+            .collect::<std::collections::HashSet<_>>()
+            .len();
+
+        let unique_locations = filtered_entries.iter()
+            .map(|entry| entry.location.id.clone())
+            .collect::<std::collections::HashSet<_>>()
+            .len();
+
+        let status_breakdown = self.calculate_status_breakdown(&filtered_entries);
+        let location_breakdown = self.calculate_location_breakdown(&filtered_entries);
+
+        Ok(SearchStatistics {
+            total_entries,
+            unique_products,
+            unique_companies,
+            unique_locations,
+            status_breakdown,
+            location_breakdown,
+        })
+    }
+
+    // Helper method to calculate status breakdown
+    fn calculate_status_breakdown(&self, entries: &[&TrackingEntry]) -> HashMap<TrackingStatus, usize> {
+        let mut breakdown = HashMap::new();
+        for entry in entries {
+            *breakdown.entry(entry.status.clone()).or_insert(0) += 1;
+        }
+        breakdown
+    }
+
+    // Helper method to calculate location breakdown
+    fn calculate_location_breakdown(&self, entries: &[&TrackingEntry]) -> HashMap<LocationType, usize> {
+        let mut breakdown = HashMap::new();
+        for entry in entries {
+            *breakdown.entry(entry.location.location_type.clone()).or_insert(0) += 1;
+        }
+        breakdown
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchStatistics {
+    pub total_entries: usize,
+    pub unique_products: usize,
+    pub unique_companies: usize,
+    pub unique_locations: usize,
+    pub status_breakdown: HashMap<TrackingStatus, usize>,
+    pub location_breakdown: HashMap<LocationType, usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
