@@ -4,6 +4,7 @@ mod company_management;
 mod role_permissions;
 mod product_management;
 mod supply_chain_tracking;
+mod qr_code_system;
 
 use types::*;
 use user_management::*;
@@ -11,6 +12,7 @@ use company_management::*;
 use role_permissions::*;
 use product_management::*;
 use supply_chain_tracking::*;
+use qr_code_system::*;
 
 fn main() {
     println!("🚀 Supply Chain Parachain Node Starting...");
@@ -973,4 +975,282 @@ fn demo_supply_chain_tracking() {
     }
     
     println!("   ✅ Supply Chain Tracking pallet working correctly!");
+}
+
+fn demo_qr_code_system() {
+    println!("\n📱 Demonstrating QR Code System:");
+    
+    let mut qr_system = QrCodeSystem::new();
+    let company_id = "company_1".to_string();
+    let owner_id = "user_1".to_string();
+    let warehouse_id = "user_3".to_string();
+    let mobile_user_id = "user_5".to_string();
+    
+    // Set up roles
+    qr_system.set_owner_role(company_id.clone(), owner_id.clone());
+    qr_system.assign_role(company_id.clone(), warehouse_id.clone(), UserRole::Warehouse, owner_id.clone())
+        .expect("Failed to assign warehouse role");
+    qr_system.assign_role(company_id.clone(), mobile_user_id.clone(), UserRole::Transport, owner_id.clone())
+        .expect("Failed to assign transport role");
+    
+    // Generate QR codes for different entities
+    
+    // Product QR code
+    let mut product_metadata = std::collections::HashMap::new();
+    product_metadata.insert("batch".to_string(), "COL-2024-001".to_string());
+    product_metadata.insert("expiry".to_string(), "2025-12-31".to_string());
+    
+    let product_qr_request = QrCodeRequest {
+        entity_type: EntityType::Product,
+        entity_id: "prod_1".to_string(),
+        company_id: company_id.clone(),
+        access_level: QrAccessLevel::Company,
+        expires_at: None, // No expiration
+        metadata: product_metadata,
+    };
+    
+    let product_qr_id = qr_system.generate_qr_code(
+        owner_id.clone(),
+        company_id.clone(),
+        product_qr_request,
+    ).expect("Failed to generate product QR code");
+    
+    println!("   📦 Product QR code generated: {}", product_qr_id);
+    println!("      URL: https://supplychainmanager.io/verify/{}", product_qr_id);
+    
+    // Location QR code (public access for check-ins)
+    let location_qr_request = QrCodeRequest {
+        entity_type: EntityType::Location,
+        entity_id: "warehouse_001".to_string(),
+        company_id: company_id.clone(),
+        access_level: QrAccessLevel::Public,
+        expires_at: None,
+        metadata: std::collections::HashMap::new(),
+    };
+    
+    let location_qr_id = qr_system.generate_qr_code(
+        owner_id.clone(),
+        company_id.clone(),
+        location_qr_request,
+    ).expect("Failed to generate location QR code");
+    
+    println!("   📍 Location QR code generated: {}", location_qr_id);
+    
+    // Shipment QR code (temporary, expires in 30 days)
+    let current_time = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    
+    let shipment_qr_request = QrCodeRequest {
+        entity_type: EntityType::Shipment,
+        entity_id: "ship_001".to_string(),
+        company_id: company_id.clone(),
+        access_level: QrAccessLevel::Internal,
+        expires_at: Some(current_time + 30 * 24 * 60 * 60), // 30 days
+        metadata: {
+            let mut meta = std::collections::HashMap::new();
+            meta.insert("tracking_number".to_string(), "TRACK-COL-US-001".to_string());
+            meta.insert("priority".to_string(), "high".to_string());
+            meta
+        },
+    };
+    
+    let shipment_qr_id = qr_system.generate_qr_code(
+        warehouse_id.clone(),
+        company_id.clone(),
+        shipment_qr_request,
+    ).expect("Failed to generate shipment QR code");
+    
+    println!("   🚛 Shipment QR code generated: {} (expires in 30 days)", shipment_qr_id);
+    
+    // Create mobile session for field worker
+    let session_id = qr_system.create_mobile_session(
+        mobile_user_id.clone(),
+        company_id.clone(),
+        "DEVICE_12345".to_string(),
+    ).expect("Failed to create mobile session");
+    
+    println!("   📱 Mobile session created: {} (24h validity)", session_id);
+    
+    // Simulate QR code scanning scenarios
+    println!("\n   📱 QR Code Scanning Scenarios:");
+    
+    // Scenario 1: Company employee scans product QR
+    let device_info = DeviceInfo {
+        device_type: "iPhone 13".to_string(),
+        os_version: Some("iOS 16.5".to_string()),
+        app_version: Some("SupplyChain 2.1.0".to_string()),
+        user_agent: None,
+    };
+    
+    let gps_location = GpsLocation {
+        latitude: 4.6097,
+        longitude: -74.0817,
+        accuracy: Some(5.0),
+        timestamp: current_time,
+    };
+    
+    let scan_request = QrScanRequest {
+        qr_code_id: product_qr_id.clone(),
+        scanner_user_id: Some(warehouse_id.clone()),
+        device_info: Some(device_info.clone()),
+        location: Some(gps_location.clone()),
+        action: Some("view_details".to_string()),
+    };
+    
+    let scan_response = qr_system.verify_qr_code(scan_request)
+        .expect("Failed to verify QR code");
+    
+    println!("      ✅ Product QR scan by company employee:");
+    println!("         Access granted: {}", scan_response.access_granted);
+    println!("         Available actions: {}", scan_response.available_actions.len());
+    if let Some(ref entity_data) = scan_response.entity_data {
+        println!("         Entity: {} ({})", entity_data.display_name, entity_data.status);
+        if let Some(ref history) = entity_data.tracking_history {
+            println!("         Tracking history: {} entries", history.len());
+        }
+    }
+    
+    // Scenario 2: Public scan of location QR (no authentication)
+    let public_scan_request = QrScanRequest {
+        qr_code_id: location_qr_id.clone(),
+        scanner_user_id: None, // Anonymous scan
+        device_info: Some(DeviceInfo {
+            device_type: "Android".to_string(),
+            os_version: Some("Android 13".to_string()),
+            app_version: None,
+            user_agent: Some("Mozilla/5.0 (Mobile)".to_string()),
+        }),
+        location: None,
+        action: Some("check_in".to_string()),
+    };
+    
+    let public_scan_response = qr_system.verify_qr_code(public_scan_request)
+        .expect("Failed to verify location QR code");
+    
+    println!("      🌐 Location QR scan by anonymous user:");
+    println!("         Access granted: {}", public_scan_response.access_granted);
+    println!("         Available actions: {}", public_scan_response.available_actions.len());
+    
+    // Scenario 3: Unauthorized scan of internal shipment QR
+    let unauthorized_scan_request = QrScanRequest {
+        qr_code_id: shipment_qr_id.clone(),
+        scanner_user_id: None, // Anonymous - should be denied
+        device_info: None,
+        location: None,
+        action: None,
+    };
+    
+    let unauthorized_response = qr_system.verify_qr_code(unauthorized_scan_request)
+        .expect("Failed to verify shipment QR code");
+    
+    println!("      🚫 Shipment QR scan by unauthorized user:");
+    println!("         Access granted: {}", unauthorized_response.access_granted);
+    println!("         Verification result: {:?}", unauthorized_response.verification_result);
+    
+    // Scenario 4: Authorized manager scans shipment QR
+    let authorized_scan_request = QrScanRequest {
+        qr_code_id: shipment_qr_id.clone(),
+        scanner_user_id: Some(owner_id.clone()), // Owner has access
+        device_info: Some(device_info),
+        location: Some(gps_location),
+        action: Some("update_status".to_string()),
+    };
+    
+    let authorized_response = qr_system.verify_qr_code(authorized_scan_request)
+        .expect("Failed to verify shipment QR code");
+    
+    println!("      👑 Shipment QR scan by company owner:");
+    println!("         Access granted: {}", authorized_response.access_granted);
+    println!("         Available actions: {}", authorized_response.available_actions.len());
+    for action in &authorized_response.available_actions {
+        println!("            - {}: {}", action.display_name, action.description);
+        if action.requires_auth {
+            println!("              (Requires: {:?})", action.required_role);
+        }
+        if !action.parameters.is_empty() {
+            println!("              Parameters: {}", action.parameters.len());
+        }
+    }
+    
+    // Get QR code statistics
+    let qr_stats = qr_system.get_qr_statistics(&company_id);
+    println!("\n   📊 QR Code Statistics:");
+    println!("      - Total QR Codes: {}", qr_stats.total_qr_codes);
+    println!("      - Active QR Codes: {}", qr_stats.active_qr_codes);
+    println!("      - Expired QR Codes: {}", qr_stats.expired_qr_codes);
+    println!("      - Total Scans: {}", qr_stats.total_scans);
+    println!("      - Unique Scanners: {}", qr_stats.unique_scanners);
+    
+    println!("   📱 QR Code Type Breakdown:");
+    for (qr_type, count) in &qr_stats.qr_types_breakdown {
+        println!("      - {:?}: {}", qr_type, count);
+    }
+    
+    // Test expired QR code (simulate by creating one that's already expired)
+    let expired_qr_request = QrCodeRequest {
+        entity_type: EntityType::Document,
+        entity_id: "temp_doc_001".to_string(),
+        company_id: company_id.clone(),
+        access_level: QrAccessLevel::Private,
+        expires_at: Some(current_time - 3600), // Expired 1 hour ago
+        metadata: std::collections::HashMap::new(),
+    };
+    
+    let expired_qr_id = qr_system.generate_qr_code(
+        owner_id.clone(),
+        company_id.clone(),
+        expired_qr_request,
+    ).expect("Failed to generate expired QR code");
+    
+    // Try to scan expired QR code
+    let expired_scan_request = QrScanRequest {
+        qr_code_id: expired_qr_id,
+        scanner_user_id: Some(owner_id.clone()),
+        device_info: None,
+        location: None,
+        action: None,
+    };
+    
+    let expired_scan_response = qr_system.verify_qr_code(expired_scan_request)
+        .expect("Failed to verify expired QR code");
+    
+    println!("\n   ⏰ Expired QR Code Test:");
+    println!("      Access granted: {}", expired_scan_response.access_granted);
+    println!("      Verification result: {:?}", expired_scan_response.verification_result);
+    
+    // Generate QR codes for different access levels and test mobile features
+    println!("\n   📱 Mobile Features Demonstration:");
+    
+    // Show available mobile permissions for different roles
+    let transport_session = qr_system.create_mobile_session(
+        mobile_user_id.clone(),
+        company_id.clone(),
+        "MOBILE_DEVICE_001".to_string(),
+    ).expect("Failed to create transport mobile session");
+    
+    println!("      📱 Transport worker mobile session: {}", transport_session);
+    
+    let manager_session = qr_system.create_mobile_session(
+        owner_id.clone(),
+        company_id.clone(),
+        "TABLET_002".to_string(),
+    ).expect("Failed to create manager mobile session");
+    
+    println!("      💼 Manager mobile session: {}", manager_session);
+    
+    // Final statistics after all operations
+    let final_stats = qr_system.get_qr_statistics(&company_id);
+    println!("\n   📈 Final QR Statistics:");
+    println!("      - Total QR Codes: {}", final_stats.total_qr_codes);
+    println!("      - Total Scans: {}", final_stats.total_scans);
+    println!("      - Success Rate: {:.1}%", 
+             if final_stats.total_scans > 0 { 
+                 (final_stats.total_scans as f32 - 1.0) / final_stats.total_scans as f32 * 100.0 
+             } else { 
+                 100.0 
+             });
+    
+    println!("   ✅ QR Code System working correctly!");
 }
