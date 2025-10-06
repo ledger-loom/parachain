@@ -321,10 +321,12 @@ parameter_types! {
 	pub const TransactionByteFee: Balance = 1 * MICROUNIT;
 }
 
+pub type WeightToFee = ConstantMultiplier<Balance, ConstU128<{ UNIT }>>;
+
 impl pallet_transaction_payment::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type OnChargeTransaction = pallet_transaction_payment::CurrencyAdapter<Balances, ()>;
-	type WeightToFee = ConstantMultiplier<Balance, ConstU128<{ UNIT }>>;
+	type WeightToFee = WeightToFee;
 	type LengthToFee = ConstantMultiplier<Balance, ConstU128<{ TransactionByteFee::get() }>>;
 	type FeeMultiplierUpdate = SlowAdjustingFeeUpdate<Self>;
 	type OperationalFeeMultiplier = ConstU8<5>;
@@ -422,6 +424,16 @@ impl pallet_authorship::Config for Runtime {
 parameter_types! {
 	pub MessageQueueServiceWeight: Weight = Perbill::from_percent(35) * RuntimeBlockWeights::get().max_block;
 }
+
+parameter_types! {
+	pub const BLOCK_PROCESSING_VELOCITY: u32 = 1;
+	pub const UNINCLUDED_SEGMENT_CAPACITY: u32 = 2;
+	pub ParentOrParentsExecutivePlurality: MultiLocation = MultiLocation::parent();
+	pub Sibling: MultiLocation = MultiLocation::parent();
+	pub RelayOrigin: AggregateMessageOrigin = AggregateMessageOrigin::Parent;
+}
+
+pub use cumulus_primitives_core::NarrowOriginToSibling;
 
 impl pallet_message_queue::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
@@ -628,6 +640,52 @@ pub type Barrier = TrailingSetTopicAsId<
 	>,
 >;
 
+// ===== Supply Chain Pallets Configuration =====
+
+// User Management Pallet Configuration
+impl pallet_user_management::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type WeightInfo = pallet_user_management::weights::SubstrateWeight<Runtime>;
+	type MaxProfileLength = ConstU32<256>;
+	type MaxDocuments = ConstU32<10>;
+}
+
+// Company Management Pallet Configuration
+impl pallet_company_management::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type WeightInfo = pallet_company_management::weights::SubstrateWeight<Runtime>;
+	type MaxNameLength = ConstU32<128>;
+	type MaxMembers = ConstU32<100>;
+}
+
+// Product Management Pallet Configuration
+impl pallet_product_management::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type WeightInfo = pallet_product_management::weights::SubstrateWeight<Runtime>;
+	type MaxNameLength = ConstU32<128>;
+	type MaxCategoryLength = ConstU32<64>;
+	type MaxAttributes = ConstU32<20>;
+	type MaxAttributeKeyLength = ConstU32<64>;
+	type MaxAttributeValueLength = ConstU32<256>;
+}
+
+// Supply Chain Tracking Pallet Configuration
+impl pallet_supply_chain_tracking::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type WeightInfo = pallet_supply_chain_tracking::weights::SubstrateWeight<Runtime>;
+	type MaxLocationLength = ConstU32<128>;
+	type MaxNotesLength = ConstU32<512>;
+	type MaxEvents = ConstU32<100>;
+}
+
+// Role & Permissions Pallet Configuration
+impl pallet_role_permissions::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type WeightInfo = pallet_role_permissions::weights::SubstrateWeight<Runtime>;
+	type MaxRoleNameLength = ConstU32<64>;
+	type MaxPermissions = ConstU32<20>;
+}
+
 // Construct runtime
 construct_runtime!(
 	pub struct Runtime {
@@ -657,6 +715,13 @@ construct_runtime!(
 		CumulusXcm: cumulus_pallet_xcm,
 		DmpQueue: cumulus_pallet_dmp_queue,
 		MessageQueue: pallet_message_queue,
+
+		// Supply Chain Pallets
+		UserManagement: pallet_user_management,
+		CompanyManagement: pallet_company_management,
+		ProductManagement: pallet_product_management,
+		SupplyChainTracking: pallet_supply_chain_tracking,
+		RolePermissions: pallet_role_permissions,
 	}
 );
 
@@ -834,6 +899,13 @@ impl_runtime_apis! {
 			list_benchmark!(list, extra, pallet_collator_selection, CollatorSelection);
 			list_benchmark!(list, extra, cumulus_pallet_xcmp_queue, XcmpQueue);
 
+			// Supply chain pallets benchmarks
+			list_benchmark!(list, extra, pallet_user_management, UserManagement);
+			list_benchmark!(list, extra, pallet_company_management, CompanyManagement);
+			list_benchmark!(list, extra, pallet_product_management, ProductManagement);
+			list_benchmark!(list, extra, pallet_supply_chain_tracking, SupplyChainTracking);
+			list_benchmark!(list, extra, pallet_role_permissions, RolePermissions);
+
 			let storage_info = AllPalletsWithSystem::storage_info();
 
 			(list, storage_info)
@@ -862,6 +934,13 @@ impl_runtime_apis! {
 			add_benchmark!(params, batches, pallet_sudo, Sudo);
 			add_benchmark!(params, batches, pallet_collator_selection, CollatorSelection);
 			add_benchmark!(params, batches, cumulus_pallet_xcmp_queue, XcmpQueue);
+
+			// Supply chain pallets benchmarks
+			add_benchmark!(params, batches, pallet_user_management, UserManagement);
+			add_benchmark!(params, batches, pallet_company_management, CompanyManagement);
+			add_benchmark!(params, batches, pallet_product_management, ProductManagement);
+			add_benchmark!(params, batches, pallet_supply_chain_tracking, SupplyChainTracking);
+			add_benchmark!(params, batches, pallet_role_permissions, RolePermissions);
 
 			Ok(batches)
 		}

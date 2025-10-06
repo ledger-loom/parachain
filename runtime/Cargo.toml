@@ -23,6 +23,11 @@ serde = { features = ["derive"], workspace = true, optional = true, default-feat
 smallvec = "1.11.0"
 
 # Local
+pallet-user-management = { path = "../pallets/user-management", default-features = false }
+pallet-company-management = { path = "../pallets/company-management", default-features = false }
+pallet-product-management = { path = "../pallets/product-management", default-features = false }
+pallet-supply-chain-tracking = { path = "../pallets/supply-chain-tracking", default-features = false }
+pallet-role-permissions = { path = "../pallets/role-permissions", default-features = false }
 
 # Substrate
 frame-benchmarking = { workspace = true, default-features = false, optional = true }
@@ -131,6 +136,11 @@ std = [
 	"staging-xcm-executor/std",
 	"staging-xcm/std",
 	"substrate-wasm-builder",
+	"pallet-user-management/std",
+	"pallet-company-management/std",
+	"pallet-product-management/std",
+	"pallet-supply-chain-tracking/std",
+	"pallet-role-permissions/std",
 ]
 
 runtime-benchmarks = [
@@ -155,6 +165,11 @@ runtime-benchmarks = [
 	"sp-runtime/runtime-benchmarks",
 	"staging-xcm-builder/runtime-benchmarks",
 	"staging-xcm-executor/runtime-benchmarks",
+	"pallet-user-management/runtime-benchmarks",
+	"pallet-company-management/runtime-benchmarks",
+	"pallet-product-management/runtime-benchmarks",
+	"pallet-supply-chain-tracking/runtime-benchmarks",
+	"pallet-role-permissions/runtime-benchmarks",
 ]
 
 try-runtime = [
@@ -181,4 +196,9 @@ try-runtime = [
 	"polkadot-runtime-common/try-runtime",
 	"sp-runtime/try-runtime",
 	"staging-xcm-executor/try-runtime",
+	"pallet-user-management/try-runtime",
+	"pallet-company-management/try-runtime",
+	"pallet-product-management/try-runtime",
+	"pallet-supply-chain-tracking/try-runtime",
+	"pallet-role-permissions/try-runtime",
 ]
