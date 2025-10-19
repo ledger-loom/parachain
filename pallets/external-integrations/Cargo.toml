@@ -1,0 +1,42 @@
+[package]
+name = "pallet-external-integrations"
+description = "FRAME pallet for external integrations (API, bulk import/export, email, barcode)"
+version = "0.1.0"
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+edition.workspace = true
+publish = false
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+codec = { features = ["derive"], workspace = true }
+frame = { workspace = true, features = ["experimental", "runtime"], default-features = false }
+scale-info = { features = ["derive"], workspace = true }
+serde = { features = ["derive"], workspace = true, optional = true }
+sp-std = { workspace = true }
+sp-runtime = { workspace = true }
+
+# For barcode and data processing
+hex = { version = "0.4", default-features = false }
+
+[dev-dependencies]
+sp-core = { workspace = true, default-features = true }
+sp-io = { workspace = true, default-features = true }
+
+[features]
+default = ["std"]
+runtime-benchmarks = ["frame/runtime-benchmarks"]
+std = [
+	"codec/std",
+	"frame/std",
+	"scale-info/std",
+	"serde",
+	"sp-std/std",
+	"sp-runtime/std",
+	"hex/std",
+]
+try-runtime = ["frame/try-runtime"]

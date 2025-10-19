@@ -28,6 +28,7 @@ pallet-company-management = { path = "../pallets/company-management", default-fe
 pallet-product-management = { path = "../pallets/product-management", default-features = false }
 pallet-supply-chain-tracking = { path = "../pallets/supply-chain-tracking", default-features = false }
 pallet-role-permissions = { path = "../pallets/role-permissions", default-features = false }
+pallet-external-integrations = { path = "../pallets/external-integrations", default-features = false }
 
 # Substrate
 frame-benchmarking = { workspace = true, default-features = false, optional = true }
@@ -141,6 +142,7 @@ std = [
 	"pallet-product-management/std",
 	"pallet-supply-chain-tracking/std",
 	"pallet-role-permissions/std",
+	"pallet-external-integrations/std",
 ]
 
 runtime-benchmarks = [
@@ -170,6 +172,7 @@ runtime-benchmarks = [
 	"pallet-product-management/runtime-benchmarks",
 	"pallet-supply-chain-tracking/runtime-benchmarks",
 	"pallet-role-permissions/runtime-benchmarks",
+	"pallet-external-integrations/runtime-benchmarks",
 ]
 
 try-runtime = [
@@ -201,4 +204,5 @@ try-runtime = [
 	"pallet-product-management/try-runtime",
 	"pallet-supply-chain-tracking/try-runtime",
 	"pallet-role-permissions/try-runtime",
+	"pallet-external-integrations/try-runtime",
 ]
