@@ -22,7 +22,7 @@
 #![allow(unused_imports)]
 #![allow(clippy::unnecessary_cast)]
 
-use frame_support::{traits::Get, weights::{Weight, constants::RocksDbWeight}};
+use frame::deps::frame_support::{traits::Get, weights::{Weight, constants::RocksDbWeight}};
 use core::marker::PhantomData;
 
 /// Weight functions needed for `pallet_product_management`.
@@ -35,7 +35,7 @@ pub trait WeightInfo {
 
 /// Weights for `pallet_product_management` using the Substrate node and recommended hardware.
 pub struct SubstrateWeight<T>(PhantomData<T>);
-impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
+impl<T: frame::deps::frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: Products (r:0 w:1)
 	/// Proof: Products (max_values: None, max_size: Some(500), added: 2975, mode: MaxEncodedLen)
 	/// Storage: CompanyProducts (r:0 w:1)

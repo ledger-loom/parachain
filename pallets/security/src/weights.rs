@@ -8,7 +8,7 @@
 #![allow(unused_imports)]
 #![allow(missing_docs)]
 
-use frame_support::{traits::Get, weights::Weight};
+use frame::deps::frame_support::{traits::Get, weights::Weight};
 use core::marker::PhantomData;
 
 /// Weight functions needed for `pallet_security`.
@@ -36,7 +36,7 @@ pub trait WeightInfo {
 
 /// Weights for `pallet_security` using the Substrate node and recommended hardware.
 pub struct SubstrateWeight<T>(PhantomData<T>);
-impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
+impl<T: frame::deps::frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	fn create_encryption_key() -> Weight {
 		Weight::from_parts(60_000_000, 0)
 			.saturating_add(T::DbWeight::get().reads(1))

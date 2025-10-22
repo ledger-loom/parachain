@@ -14,6 +14,8 @@
 //! blockchain through secure APIs, allows for batch data operations, sends notifications
 //! to users, and supports barcode-based product tracking.
 
+use scale_info::prelude::vec::Vec;
+
 pub use pallet::*;
 
 #[cfg(test)]
@@ -32,8 +34,7 @@ pub use weights::*;
 pub mod pallet {
 	use super::*;
 	use frame::prelude::*;
-	use sp_std::vec::Vec;
-	use sp_runtime::traits::Hash;
+	use scale_info::prelude::{vec, vec::Vec};
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -132,7 +133,7 @@ pub mod pallet {
 		_,
 		Blake2_128Concat,
 		EmailTemplateType,
-		EmailTemplate,
+		EmailTemplate<T>,
 		OptionQuery,
 	>;
 
@@ -176,7 +177,7 @@ pub mod pallet {
 		_,
 		Blake2_128Concat,
 		T::AccountId,
-		BoundedVec<WebhookEndpoint, T::MaxApiKeysPerAccount>,
+		BoundedVec<WebhookEndpoint<T>, T::MaxApiKeysPerAccount>,
 		ValueQuery,
 	>;
 
@@ -273,6 +274,9 @@ pub mod pallet {
 
 		/// Email queue full
 		EmailQueueFull,
+
+		/// Too many recipients
+		TooManyRecipients,
 
 		/// Email sending failed
 		EmailSendingFailed,
@@ -524,15 +528,37 @@ pub mod pallet {
 				Error::<T>::EmailTemplateNotFound
 			);
 
-			// Generate email ID
-			let email_id = T::Hashing::hash_of(&(who.clone(), recipients.clone(), frame_system::Pallet::<T>::block_number()));
-
 			// Create email notification
+			// Convert Vec<Vec<u8>> to BoundedVec<BoundedVec<u8, ...>, ...>
+			let bounded_recipients: BoundedVec<BoundedVec<u8, ConstU32<128>>, T::MaxEmailRecipients> = recipients
+				.into_iter()
+				.map(|r| r.try_into().map_err(|_| Error::<T>::InvalidEmailAddress))
+				.collect::<Result<Vec<_>, _>>()?
+				.try_into()
+				.map_err(|_| Error::<T>::TooManyRecipients)?;
+
+			// Generate email ID
+			let email_id = T::Hashing::hash_of(&(who.clone(), &bounded_recipients, frame_system::Pallet::<T>::block_number()));
+
+			let bounded_variables: BoundedVec<(BoundedVec<u8, ConstU32<64>>, BoundedVec<u8, ConstU32<256>>), ConstU32<32>> = variables
+				.into_iter()
+				.map(|(k, v)| -> Result<(BoundedVec<u8, ConstU32<64>>, BoundedVec<u8, ConstU32<256>>), Error<T>> {
+					let bk: BoundedVec<u8, ConstU32<64>> = k.try_into().map_err(|_| Error::<T>::InvalidEmailAddress)?;
+					let bv: BoundedVec<u8, ConstU32<256>> = v.try_into().map_err(|_| Error::<T>::InvalidEmailAddress)?;
+					Ok((bk, bv))
+				})
+				.collect::<Result<Vec<_>, _>>()?
+				.try_into()
+				.map_err(|_| Error::<T>::InvalidEmailAddress)?;
+
+			// Save first recipient for event before moving
+			let first_recipient = bounded_recipients.get(0).cloned().unwrap_or_default().to_vec();
+
 			let email = EmailNotification {
 				sender: who.clone(),
-				recipients: recipients.clone().try_into().map_err(|_| Error::<T>::InvalidEmailAddress)?,
+				recipients: bounded_recipients,
 				template_type: template_type.clone(),
-				variables: variables.try_into().map_err(|_| Error::<T>::InvalidEmailAddress)?,
+				variables: bounded_variables,
 				queued_at: frame_system::Pallet::<T>::block_number(),
 				retry_count: 0,
 			};
@@ -552,7 +578,7 @@ pub mod pallet {
 			// Emit event
 			Self::deposit_event(Event::EmailQueued {
 				email_id,
-				recipient: recipients[0].clone(),
+				recipient: first_recipient,
 				template_type,
 			});
 
@@ -799,17 +825,16 @@ pub mod pallet {
 			event_type: WebhookEventType,
 			payload: Vec<u8>,
 		) {
-			if let Some(webhooks) = Webhooks::<T>::get(account).into_iter().next() {
-				for webhook in webhooks.iter() {
-					if webhook.is_active && webhook.event_types.contains(&event_type) {
-						// In a real implementation, this would make an off-chain HTTP request
-						// For now, we just emit an event
-						Self::deposit_event(Event::WebhookTriggered {
-							account: account.clone(),
-							url: webhook.url.clone(),
-							event_type: event_type.clone(),
-						});
-					}
+			let webhooks = Webhooks::<T>::get(account);
+			for webhook in webhooks.iter() {
+				if webhook.is_active && webhook.event_types.contains(&event_type) {
+					// In a real implementation, this would make an off-chain HTTP request
+					// For now, we just emit an event
+					Self::deposit_event(Event::WebhookTriggered {
+						account: account.clone(),
+						url: webhook.url.clone(),
+						event_type: event_type.clone(),
+					});
 				}
 			}
 		}
@@ -818,13 +843,12 @@ pub mod pallet {
 
 // ===== Type Definitions =====
 
-use codec::{Decode, Encode, MaxEncodedLen};
+use codec::{Decode, Encode};
 use frame::prelude::*;
 use scale_info::TypeInfo;
-use sp_runtime::BoundedVec;
 
 /// API Key information
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 #[scale_info(skip_type_params(T))]
 pub struct ApiKeyInfo<T: Config> {
 	pub owner: T::AccountId,
@@ -837,7 +861,7 @@ pub struct ApiKeyInfo<T: Config> {
 }
 
 /// API permissions
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum ApiPermission {
 	ReadProducts,
 	WriteProducts,
@@ -853,7 +877,7 @@ pub enum ApiPermission {
 }
 
 /// Rate limit tracking
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 #[scale_info(skip_type_params(T))]
 pub struct RateLimitInfo<BlockNumber> {
 	pub last_reset: BlockNumber,
@@ -870,7 +894,7 @@ impl<BlockNumber: Default> Default for RateLimitInfo<BlockNumber> {
 }
 
 /// Import job information
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 #[scale_info(skip_type_params(T))]
 pub struct ImportJobInfo<T: Config> {
 	pub creator: T::AccountId,
@@ -886,7 +910,7 @@ pub struct ImportJobInfo<T: Config> {
 }
 
 /// Import data type
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum ImportType {
 	Products,
 	Users,
@@ -896,7 +920,7 @@ pub enum ImportType {
 }
 
 /// Export job information
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 #[scale_info(skip_type_params(T))]
 pub struct ExportJobInfo<T: Config> {
 	pub creator: T::AccountId,
@@ -910,7 +934,7 @@ pub struct ExportJobInfo<T: Config> {
 }
 
 /// Export data type
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum ExportType {
 	Products,
 	Users,
@@ -921,7 +945,7 @@ pub enum ExportType {
 }
 
 /// Export format
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum ExportFormat {
 	CSV,
 	JSON,
@@ -940,7 +964,7 @@ pub enum JobStatus {
 }
 
 /// Email notification
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 #[scale_info(skip_type_params(T))]
 pub struct EmailNotification<T: Config> {
 	pub sender: T::AccountId,
@@ -952,16 +976,17 @@ pub struct EmailNotification<T: Config> {
 }
 
 /// Email template
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-pub struct EmailTemplate {
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+#[scale_info(skip_type_params(T))]
+pub struct EmailTemplate<T: Config> {
 	pub name: Vec<u8>,
 	pub subject: Vec<u8>,
 	pub body: Vec<u8>,
-	pub created_at: u32,
+	pub created_at: BlockNumberFor<T>,
 }
 
 /// Email template types
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum EmailTemplateType {
 	UserInvitation,
 	ProductUpdate,
@@ -973,7 +998,7 @@ pub enum EmailTemplateType {
 }
 
 /// Email delivery status
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 #[scale_info(skip_type_params(T))]
 pub struct DeliveryStatus<BlockNumber> {
 	pub status: EmailStatus,
@@ -993,7 +1018,7 @@ pub enum EmailStatus {
 }
 
 /// Barcode information
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 #[scale_info(skip_type_params(T))]
 pub struct BarcodeInfo<T: Config> {
 	pub entity_type: BarcodeEntityType,
@@ -1006,7 +1031,7 @@ pub struct BarcodeInfo<T: Config> {
 }
 
 /// Barcode entity type
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum BarcodeEntityType {
 	Product,
 	Shipment,
@@ -1016,7 +1041,7 @@ pub enum BarcodeEntityType {
 }
 
 /// Barcode type
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum BarcodeType {
 	QRCode,
 	Code128,
@@ -1029,17 +1054,18 @@ pub enum BarcodeType {
 }
 
 /// Webhook endpoint
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-pub struct WebhookEndpoint {
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+#[scale_info(skip_type_params(T))]
+pub struct WebhookEndpoint<T: Config> {
 	pub url: Vec<u8>,
 	pub event_types: BoundedVec<WebhookEventType, ConstU32<16>>,
 	pub secret: Option<Vec<u8>>,
 	pub is_active: bool,
-	pub created_at: u32,
+	pub created_at: BlockNumberFor<T>,
 }
 
 /// Webhook event types
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum WebhookEventType {
 	ProductCreated,
 	ProductUpdated,

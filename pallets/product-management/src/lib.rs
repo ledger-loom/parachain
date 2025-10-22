@@ -24,11 +24,12 @@ pub use weights::*;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
-#[frame::pallet]
+#[frame::pallet(dev_mode)]
 pub mod pallet {
+	use crate::WeightInfo;
 	use frame::prelude::*;
-	use frame_support::pallet_prelude::*;
-	use frame_system::pallet_prelude::*;
+	use frame::deps::codec::{Decode, Encode, MaxEncodedLen, DecodeWithMemTracking};
+	use scale_info::prelude::vec::Vec;
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
@@ -55,7 +56,7 @@ pub mod pallet {
 	pub struct Pallet<T>(_);
 
 	/// Product attribute
-	#[derive(CloneNoBound, Encode, Decode, Eq, PartialEqNoBound, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(CloneNoBound, Encode, Decode, PartialEqNoBound, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(T))]
 	pub struct ProductAttribute<T: Config> {
 		pub key: BoundedVec<u8, T::MaxAttributeKeyLength>,
@@ -63,7 +64,7 @@ pub mod pallet {
 	}
 
 	/// Product status
-	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	pub enum ProductStatus {
 		Active,
 		Inactive,
@@ -72,7 +73,7 @@ pub mod pallet {
 	}
 
 	/// Product information
-	#[derive(CloneNoBound, Encode, Decode, Eq, PartialEqNoBound, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(CloneNoBound, Encode, Decode, PartialEqNoBound, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(T))]
 	pub struct Product<T: Config> {
 		pub name: BoundedVec<u8, T::MaxProductNameLength>,
@@ -189,7 +190,7 @@ pub mod pallet {
 
 			// Track category
 			Categories::<T>::mutate(&bounded_category, |count| {
-				*count = count.map_or(1, |c| c.saturating_add(1));
+				*count = Some(count.map_or(1, |c| c.saturating_add(1)));
 			});
 
 			Self::deposit_event(Event::ProductCreated { product_id, company_id, name });

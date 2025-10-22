@@ -36,11 +36,12 @@ pub use weights::*;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
-#[frame::pallet]
+#[frame::pallet(dev_mode)]
 pub mod pallet {
+	use crate::WeightInfo;
 	use frame::prelude::*;
-	use frame_support::pallet_prelude::*;
-	use frame_system::pallet_prelude::*;
+	use frame::deps::codec::{Decode, Encode, MaxEncodedLen};
+	use scale_info::prelude::vec::Vec;
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -100,7 +101,7 @@ pub mod pallet {
 	}
 
 	/// Types of verification
-	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	pub enum VerificationType {
 		/// Identity verification (KYC)
 		Identity,

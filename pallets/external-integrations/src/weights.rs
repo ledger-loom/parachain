@@ -8,7 +8,7 @@
 #![allow(unused_imports)]
 #![allow(missing_docs)]
 
-use frame_support::{traits::Get, weights::Weight};
+use frame::deps::frame_support::{traits::Get, weights::Weight};
 use core::marker::PhantomData;
 
 /// Weight functions needed for `pallet_external_integrations`.
@@ -26,7 +26,7 @@ pub trait WeightInfo {
 
 /// Weights for `pallet_external_integrations` using the Substrate node and recommended hardware.
 pub struct SubstrateWeight<T>(PhantomData<T>);
-impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
+impl<T: frame::deps::frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: `ExternalIntegrations::ApiKeys` (r:1 w:1)
 	/// Proof: `ExternalIntegrations::ApiKeys` (`max_values`: None, `max_size`: Some(1024), added: 3499, mode: `MaxEncodedLen`)
 	/// Storage: `ExternalIntegrations::UserApiKeys` (r:1 w:1)

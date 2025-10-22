@@ -17,8 +17,6 @@ codec = { features = ["derive"], workspace = true }
 frame = { workspace = true, features = ["experimental", "runtime"], default-features = false }
 scale-info = { features = ["derive"], workspace = true }
 serde = { features = ["derive"], workspace = true, optional = true }
-sp-std = { workspace = true }
-sp-runtime = { workspace = true }
 
 # For barcode and data processing
 hex = { version = "0.4", default-features = false }
@@ -35,8 +33,6 @@ std = [
 	"frame/std",
 	"scale-info/std",
 	"serde",
-	"sp-std/std",
-	"sp-runtime/std",
 	"hex/std",
 ]
 try-runtime = ["frame/try-runtime"]

@@ -5,7 +5,7 @@
 #![allow(unused_imports)]
 #![allow(clippy::unnecessary_cast)]
 
-use frame_support::{traits::Get, weights::{Weight, constants::RocksDbWeight}};
+use frame::deps::frame_support::{traits::Get, weights::{Weight, constants::RocksDbWeight}};
 use core::marker::PhantomData;
 
 pub trait WeightInfo {
@@ -19,7 +19,7 @@ pub trait WeightInfo {
 }
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
-impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
+impl<T: frame::deps::frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	fn create_company() -> Weight {
 		Weight::from_parts(60_000_000, 0)
 			.saturating_add(T::DbWeight::get().reads(2))

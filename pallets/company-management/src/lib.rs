@@ -24,11 +24,12 @@ pub use weights::*;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
-#[frame::pallet]
+#[frame::pallet(dev_mode)]
 pub mod pallet {
+	use crate::WeightInfo;
 	use frame::prelude::*;
-	use frame_support::pallet_prelude::*;
-	use frame_system::pallet_prelude::*;
+	use frame::deps::codec::{Decode, Encode, MaxEncodedLen};
+	use scale_info::prelude::vec::Vec;
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
@@ -60,7 +61,7 @@ pub mod pallet {
 	}
 
 	/// Company member details
-	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	pub enum MemberRole {
 		Owner,
 		Manager,

@@ -37,11 +37,11 @@ pub use weights::*;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
-#[frame::pallet]
+#[frame::pallet(dev_mode)]
 pub mod pallet {
+	use crate::WeightInfo;
 	use frame::prelude::*;
-	use frame_support::pallet_prelude::*;
-	use frame_system::pallet_prelude::*;
+	use scale_info::prelude::{vec, vec::Vec};
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -65,7 +65,7 @@ pub mod pallet {
 	pub struct Pallet<T>(_);
 
 	/// Permission types available in the system
-	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	pub enum Permission {
 		/// Create new products
 		CreateProduct,
@@ -162,7 +162,7 @@ pub mod pallet {
 
 	/// Genesis configuration for the pallet
 	#[pallet::genesis_config]
-	#[derive(frame_support::DefaultNoBound)]
+	#[derive(frame::prelude::DefaultNoBound)]
 	pub struct GenesisConfig<T: Config> {
 		#[serde(skip)]
 		pub _phantom: core::marker::PhantomData<T>,

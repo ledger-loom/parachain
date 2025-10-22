@@ -24,11 +24,12 @@ pub use weights::*;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
-#[frame::pallet]
+#[frame::pallet(dev_mode)]
 pub mod pallet {
 	use frame::prelude::*;
-	use frame_support::pallet_prelude::*;
-	use frame_system::pallet_prelude::*;
+	use frame::deps::codec::{Decode, Encode, MaxEncodedLen, DecodeWithMemTracking};
+	use scale_info::prelude::vec::Vec;
+	use crate::WeightInfo;
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
@@ -49,7 +50,7 @@ pub mod pallet {
 	pub struct Pallet<T>(_);
 
 	/// Event type for tracking
-	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	pub enum EventType {
 		Manufactured,
 		Shipped,
@@ -60,7 +61,7 @@ pub mod pallet {
 	}
 
 	/// Tracking event
-	#[derive(CloneNoBound, Encode, Decode, Eq, PartialEqNoBound, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(CloneNoBound, Encode, Decode, PartialEqNoBound, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(T))]
 	pub struct TrackingEvent<T: Config> {
 		pub event_type: EventType,
@@ -71,7 +72,7 @@ pub mod pallet {
 	}
 
 	/// Tracking status
-	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	pub enum TrackingStatus {
 		Created,
 		InProgress,
@@ -81,7 +82,7 @@ pub mod pallet {
 	}
 
 	/// Tracking record for a product
-	#[derive(CloneNoBound, Encode, Decode, Eq, PartialEqNoBound, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(CloneNoBound, Encode, Decode, PartialEqNoBound, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(T))]
 	pub struct TrackingRecord<T: Config> {
 		pub product_id: u32,
@@ -297,8 +298,11 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		/// Hash a location string for indexing
 		fn hash_location(location: &[u8]) -> [u8; 32] {
-			use frame_support::sp_io::hashing::blake2_256;
-			blake2_256(location)
+			use frame::traits::Hash;
+			let hash = <T::Hashing as Hash>::hash(location);
+			let mut result = [0u8; 32];
+			result.copy_from_slice(hash.as_ref());
+			result
 		}
 	}
 }

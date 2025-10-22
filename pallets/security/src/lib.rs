@@ -14,6 +14,8 @@
 //! provides disaster recovery capabilities, and implements enterprise-grade
 //! authentication mechanisms.
 
+use scale_info::prelude::vec::Vec;
+
 pub use pallet::*;
 
 #[cfg(test)]
@@ -32,9 +34,7 @@ pub use weights::*;
 pub mod pallet {
 	use super::*;
 	use frame::prelude::*;
-	use sp_std::vec::Vec;
-	use sp_runtime::traits::Hash;
-	use sp_core::crypto::AccountId32;
+	use scale_info::prelude::{vec, vec::Vec};
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -204,7 +204,7 @@ pub mod pallet {
 		_,
 		Blake2_128Concat,
 		T::AccountId,
-		BoundedVec<MfaDevice, T::MaxMfaDevices>,
+		BoundedVec<MfaDevice<T>, T::MaxMfaDevices>,
 		ValueQuery,
 	>;
 
@@ -226,7 +226,7 @@ pub mod pallet {
 		_,
 		Blake2_128Concat,
 		T::AccountId,
-		BoundedVec<OAuthConnection, T::MaxOAuthProviders>,
+		BoundedVec<OAuthConnection<T>, T::MaxOAuthProviders>,
 		ValueQuery,
 	>;
 
@@ -259,7 +259,7 @@ pub mod pallet {
 		_,
 		Blake2_128Concat,
 		T::AccountId,
-		BoundedVec<IpAddress, ConstU32<100>>,
+		BoundedVec<IpAddress<T>, ConstU32<100>>,
 		ValueQuery,
 	>;
 
@@ -269,7 +269,7 @@ pub mod pallet {
 	pub type IpBlacklist<T: Config> = StorageMap<
 		_,
 		Blake2_128Concat,
-		IpAddress,
+		IpAddress<T>,
 		IpBanInfo<T>,
 		OptionQuery,
 	>;
@@ -290,7 +290,7 @@ pub mod pallet {
 	#[pallet::getter(fn security_policies)]
 	pub type SecurityPolicies<T: Config> = StorageValue<
 		_,
-		SecurityPolicyConfig,
+		SecurityPolicyConfig<T>,
 		ValueQuery,
 	>;
 
@@ -691,9 +691,17 @@ pub mod pallet {
 				Error::<T>::MfaAlreadyEnabled
 			);
 
+			// Convert Vec<Vec<u8>> to BoundedVec<BoundedVec<u8, ...>, ...>
+			let bounded_codes: BoundedVec<BoundedVec<u8, ConstU32<32>>, ConstU32<10>> = backup_codes
+				.into_iter()
+				.map(|code| code.try_into().map_err(|_| Error::<T>::MaxMfaDevicesReached))
+				.collect::<Result<Vec<_>, _>>()?
+				.try_into()
+				.map_err(|_| Error::<T>::MaxMfaDevicesReached)?;
+
 			let mfa_config = MfaConfiguration {
 				primary_method: method.clone(),
-				backup_codes: backup_codes.try_into().map_err(|_| Error::<T>::MaxMfaDevicesReached)?,
+				backup_codes: bounded_codes,
 				created_at: frame_system::Pallet::<T>::block_number(),
 				last_verified: None,
 				is_required: true,
@@ -1036,7 +1044,7 @@ pub mod pallet {
 		#[pallet::weight(T::WeightInfo::update_security_policy())]
 		pub fn update_security_policy(
 			origin: OriginFor<T>,
-			policy: SecurityPolicyConfig,
+			policy: SecurityPolicyConfig<T>,
 		) -> DispatchResult {
 			let _who = ensure_signed(origin)?;
 			// TODO: Add admin permission check
@@ -1129,7 +1137,7 @@ pub mod pallet {
 		}
 
 		/// Check if IP is allowed
-		pub fn is_ip_allowed(ip: &IpAddress) -> bool {
+		pub fn is_ip_allowed(ip: &IpAddress<T>) -> bool {
 			!IpBlacklist::<T>::contains_key(ip)
 		}
 	}
@@ -1137,14 +1145,13 @@ pub mod pallet {
 
 // ===== Type Definitions =====
 
-use codec::{Decode, Encode, MaxEncodedLen};
+use codec::{Decode, Encode};
 use frame::prelude::*;
 use scale_info::TypeInfo;
-use sp_runtime::BoundedVec;
 
 // --- Encryption Types ---
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 #[scale_info(skip_type_params(T))]
 pub struct EncryptionKeyInfo<T: Config> {
 	pub public_key: BoundedVec<u8, T::MaxEncryptionKeyLength>,
@@ -1154,7 +1161,7 @@ pub struct EncryptionKeyInfo<T: Config> {
 	pub rotation_count: u32,
 }
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum EncryptionType {
 	AES256,
 	RSA2048,
@@ -1163,7 +1170,7 @@ pub enum EncryptionType {
 	ECIES,
 }
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 #[scale_info(skip_type_params(T))]
 pub struct DataEncryptionInfo<T: Config> {
 	pub encrypted_by: T::AccountId,
@@ -1172,7 +1179,7 @@ pub struct DataEncryptionInfo<T: Config> {
 	pub access_count: u32,
 }
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 pub struct SystemEncryptionSettings {
 	pub is_enabled: bool,
 	pub default_algorithm: EncryptionType,
@@ -1193,7 +1200,7 @@ impl Default for SystemEncryptionSettings {
 
 // --- Audit Log Types ---
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 #[scale_info(skip_type_params(T))]
 pub struct AuditLogEntry<T: Config> {
 	pub account: T::AccountId,
@@ -1205,7 +1212,7 @@ pub struct AuditLogEntry<T: Config> {
 	pub severity: AuditSeverity,
 }
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum AuditAction {
 	// User actions
 	UserLogin,
@@ -1252,7 +1259,7 @@ pub enum AuditAction {
 	Custom,
 }
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum AuditSeverity {
 	Info,
 	Warning,
@@ -1260,7 +1267,7 @@ pub enum AuditSeverity {
 	Critical,
 }
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 pub struct AuditConfiguration {
 	pub is_enabled: bool,
 	pub retention_period: u32, // blocks
@@ -1281,7 +1288,7 @@ impl Default for AuditConfiguration {
 
 // --- Backup Types ---
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 #[scale_info(skip_type_params(T))]
 pub struct BackupSnapshot<T: Config> {
 	pub created_by: T::AccountId,
@@ -1293,7 +1300,7 @@ pub struct BackupSnapshot<T: Config> {
 	pub is_verified: bool,
 }
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum BackupType {
 	Full,
 	Incremental,
@@ -1301,7 +1308,7 @@ pub enum BackupType {
 	StateSnapshot,
 }
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 #[scale_info(skip_type_params(T))]
 pub struct BackupScheduleConfig<T: Config> {
 	pub interval: BlockNumberFor<T>,
@@ -1311,7 +1318,7 @@ pub struct BackupScheduleConfig<T: Config> {
 	pub is_enabled: bool,
 }
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 #[scale_info(skip_type_params(T))]
 pub struct RecoveryPointInfo<T: Config> {
 	pub created_by: T::AccountId,
@@ -1321,7 +1328,7 @@ pub struct RecoveryPointInfo<T: Config> {
 
 // --- MFA Types ---
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 #[scale_info(skip_type_params(T))]
 pub struct MfaConfiguration<T: Config> {
 	pub primary_method: MfaMethod,
@@ -1331,7 +1338,7 @@ pub struct MfaConfiguration<T: Config> {
 	pub is_required: bool,
 }
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum MfaMethod {
 	TOTP,        // Time-based One-Time Password (Google Authenticator)
 	SMS,         // SMS verification
@@ -1341,19 +1348,20 @@ pub enum MfaMethod {
 	BackupCode,  // One-time backup codes
 }
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-pub struct MfaDevice {
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+#[scale_info(skip_type_params(T))]
+pub struct MfaDevice<T: Config> {
 	pub device_id: Vec<u8>,
 	pub device_type: MfaMethod,
 	pub device_name: Vec<u8>,
-	pub registered_at: u32,
-	pub last_used: Option<u32>,
+	pub registered_at: BlockNumberFor<T>,
+	pub last_used: Option<BlockNumberFor<T>>,
 	pub is_trusted: bool,
 }
 
 // --- OAuth Types ---
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 pub enum OAuthProvider {
 	Google,
 	GitHub,
@@ -1364,7 +1372,7 @@ pub enum OAuthProvider {
 	Custom,
 }
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 pub struct OAuthProviderConfig {
 	pub client_id: Vec<u8>,
 	pub client_secret: Vec<u8>,
@@ -1373,17 +1381,18 @@ pub struct OAuthProviderConfig {
 	pub is_enabled: bool,
 }
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-pub struct OAuthConnection {
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+#[scale_info(skip_type_params(T))]
+pub struct OAuthConnection<T: Config> {
 	pub provider: OAuthProvider,
 	pub oauth_user_id: Vec<u8>,
-	pub connected_at: u32,
-	pub last_used: Option<u32>,
+	pub connected_at: BlockNumberFor<T>,
+	pub last_used: Option<BlockNumberFor<T>>,
 }
 
 // --- Session Types ---
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 #[scale_info(skip_type_params(T))]
 pub struct SessionInfo<T: Config> {
 	pub account: T::AccountId,
@@ -1396,20 +1405,22 @@ pub struct SessionInfo<T: Config> {
 
 // --- IP Management Types ---
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-pub struct IpAddress {
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+#[scale_info(skip_type_params(T))]
+pub struct IpAddress<T: Config> {
 	pub address: Vec<u8>,
-	pub added_at: u32,
+	pub added_at: BlockNumberFor<T>,
 }
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+#[scale_info(skip_type_params(T))]
 pub struct IpBanInfo<T: Config> {
 	pub banned_at: BlockNumberFor<T>,
 	pub reason: BoundedVec<u8, ConstU32<256>>,
 	pub expires_at: Option<BlockNumberFor<T>>,
 }
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
 #[scale_info(skip_type_params(T))]
 pub struct LoginAttemptInfo<T: Config> {
 	pub attempt_count: u32,
@@ -1431,28 +1442,29 @@ impl<T: Config> Default for LoginAttemptInfo<T> {
 
 // --- Security Policy Types ---
 
-#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
-pub struct SecurityPolicyConfig {
+#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebugNoBound, TypeInfo, MaxEncodedLen)]
+#[scale_info(skip_type_params(T))]
+pub struct SecurityPolicyConfig<T: Config> {
 	pub require_mfa: bool,
 	pub min_password_length: u8,
 	pub password_complexity: bool,
 	pub max_failed_login_attempts: u32,
-	pub lockout_duration: u32, // blocks
-	pub session_timeout: u32, // blocks
+	pub lockout_duration: BlockNumberFor<T>, // blocks
+	pub session_timeout: BlockNumberFor<T>, // blocks
 	pub require_ip_whitelist: bool,
 	pub enable_audit_logging: bool,
 	pub enforce_encryption: bool,
 }
 
-impl Default for SecurityPolicyConfig {
+impl<T: Config> Default for SecurityPolicyConfig<T> {
 	fn default() -> Self {
 		Self {
 			require_mfa: false,
 			min_password_length: 12,
 			password_complexity: true,
 			max_failed_login_attempts: 5,
-			lockout_duration: 600, // ~1 hour with 6s blocks
-			session_timeout: 14400, // ~24 hours
+			lockout_duration: 600u32.into(), // ~1 hour with 6s blocks
+			session_timeout: 14400u32.into(), // ~24 hours
 			require_ip_whitelist: false,
 			enable_audit_logging: true,
 			enforce_encryption: false,
