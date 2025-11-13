@@ -1,49 +1,59 @@
-//! Unit tests for supply chain tracking pallet
+//! Unit tests for supply chain tracking pallet (append-only architecture)
 
-use crate::{mock::*, Error, Event, EventType, TrackingStatus};
+use crate::{mock::*, Error, Event};
 use frame::deps::sp_runtime::AccountId32;
 use frame_support::{assert_noop, assert_ok};
 
 type SupplyChainTracking = crate::Pallet<Test>;
 
 #[test]
-fn create_tracking_works() {
+fn create_item_works() {
 	new_test_ext().execute_with(|| {
-		let user = AccountId32::from([1u8; 32]);
-		let product_id = 1u32;
-		let company_id = 1u32;
-		let location = b"Factory A, Beijing".to_vec();
+		System::set_block_number(1);
+		let creator = AccountId32::from([1u8; 32]);
+		let item_id = [1u8; 32];
+		let chain_id = 1u32;
+		let status = b"Created".to_vec();
+		let location = Some(b"Factory A, Beijing".to_vec());
+		let encrypted_data = b"encrypted_initial_data".to_vec();
 
-		// Create tracking record
-		assert_ok!(SupplyChainTracking::create_tracking(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			company_id,
-			location.clone()
+		// Create item with first record
+		assert_ok!(SupplyChainTracking::create_item(
+			RuntimeOrigin::signed(creator.clone()),
+			item_id,
+			chain_id,
+			status.clone(),
+			location.clone(),
+			encrypted_data.clone()
 		));
 
-		// Verify tracking record exists
-		assert!(crate::TrackingRecords::<Test>::contains_key(product_id));
+		// Verify item metadata exists
+		assert!(crate::Items::<Test>::contains_key(&item_id));
+		let metadata = crate::Items::<Test>::get(&item_id).unwrap();
+		assert_eq!(metadata.chain_id, chain_id);
+		assert_eq!(metadata.record_count, 1);
+		assert_eq!(metadata.creator, creator);
 
-		// Verify tracking details
-		let record = crate::TrackingRecords::<Test>::get(product_id).unwrap();
-		assert_eq!(record.product_id, product_id);
-		assert_eq!(record.current_status, TrackingStatus::Created);
-		assert_eq!(record.current_location.to_vec(), location);
-		assert_eq!(record.events.len(), 0);
+		// Verify first record exists
+		assert!(crate::ItemRecords::<Test>::contains_key(&item_id, 0));
+		let record = crate::ItemRecords::<Test>::get(&item_id, 0).unwrap();
+		assert_eq!(record.item_id, item_id);
+		assert_eq!(record.chain_id, chain_id);
+		assert_eq!(record.sequence, 0);
+		assert_eq!(record.status.to_vec(), status);
+		assert_eq!(record.location.as_ref().map(|l| l.to_vec()), location);
+		assert_eq!(record.recorder, creator);
+		assert_eq!(record.previous_hash, [0u8; 32]); // Genesis record has zero hash
 
-		// Verify product tracking mapping
-		assert!(crate::ProductTracking::<Test>::contains_key(company_id, product_id));
-
-		// Verify location index
-		let location_hash = SupplyChainTracking::hash_location(&location);
-		assert!(crate::LocationProducts::<Test>::contains_key(location_hash, product_id));
+		// Verify chain items mapping
+		assert!(crate::ChainItems::<Test>::contains_key(chain_id, &item_id));
 
 		// Verify event
 		System::assert_last_event(
-			Event::TrackingCreated {
-				product_id,
-				location,
+			Event::ItemCreated {
+				item_id,
+				chain_id,
+				creator,
 			}
 			.into(),
 		);
@@ -51,154 +61,73 @@ fn create_tracking_works() {
 }
 
 #[test]
-fn create_tracking_fails_with_long_location() {
+fn create_item_fails_if_already_exists() {
 	new_test_ext().execute_with(|| {
-		let user = AccountId32::from([1u8; 32]);
-		let product_id = 1u32;
-		let company_id = 1u32;
-		let location = vec![0u8; 200]; // Exceeds MaxLocationLength (128)
+		let creator = AccountId32::from([1u8; 32]);
+		let item_id = [1u8; 32];
+		let chain_id = 1u32;
 
-		assert_noop!(
-			SupplyChainTracking::create_tracking(
-				RuntimeOrigin::signed(user),
-				product_id,
-				company_id,
-				location
-			),
-			Error::<Test>::LocationTooLong
-		);
-	});
-}
-
-#[test]
-fn create_tracking_fails_for_duplicate_product() {
-	new_test_ext().execute_with(|| {
-		let user = AccountId32::from([1u8; 32]);
-		let product_id = 1u32;
-		let company_id = 1u32;
-		let location = b"Factory A".to_vec();
-
-		// Create first tracking record
-		assert_ok!(SupplyChainTracking::create_tracking(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			company_id,
-			location.clone()
+		// Create item
+		assert_ok!(SupplyChainTracking::create_item(
+			RuntimeOrigin::signed(creator.clone()),
+			item_id,
+			chain_id,
+			b"Created".to_vec(),
+			None,
+			b"data".to_vec()
 		));
 
 		// Try to create duplicate
 		assert_noop!(
-			SupplyChainTracking::create_tracking(
-				RuntimeOrigin::signed(user),
-				product_id,
-				company_id,
-				location
+			SupplyChainTracking::create_item(
+				RuntimeOrigin::signed(creator),
+				item_id,
+				chain_id,
+				b"Created".to_vec(),
+				None,
+				b"data".to_vec()
 			),
-			Error::<Test>::TrackingAlreadyExists
+			Error::<Test>::ItemAlreadyExists
 		);
 	});
 }
 
 #[test]
-fn add_event_works() {
+fn create_item_fails_with_long_status() {
 	new_test_ext().execute_with(|| {
-		let user = AccountId32::from([1u8; 32]);
-		let product_id = 1u32;
-		let company_id = 1u32;
-		let initial_location = b"Factory A".to_vec();
-
-		// Create tracking record
-		assert_ok!(SupplyChainTracking::create_tracking(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			company_id,
-			initial_location.clone()
-		));
-
-		let new_location = b"Warehouse B".to_vec();
-		let notes = b"Quality check passed".to_vec();
-
-		// Add event
-		assert_ok!(SupplyChainTracking::add_event(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			EventType::QualityCheck,
-			new_location.clone(),
-			notes.clone()
-		));
-
-		// Verify event added
-		let record = crate::TrackingRecords::<Test>::get(product_id).unwrap();
-		assert_eq!(record.events.len(), 1);
-		assert_eq!(record.events[0].event_type, EventType::QualityCheck);
-		assert_eq!(record.events[0].location.to_vec(), new_location);
-		assert_eq!(record.events[0].notes.to_vec(), notes);
-		assert_eq!(record.events[0].recorder, user);
-
-		// Verify location updated
-		assert_eq!(record.current_location.to_vec(), new_location);
-
-		// Verify location index updated
-		let old_location_hash = SupplyChainTracking::hash_location(&initial_location);
-		assert!(!crate::LocationProducts::<Test>::contains_key(old_location_hash, product_id));
-
-		let new_location_hash = SupplyChainTracking::hash_location(&new_location);
-		assert!(crate::LocationProducts::<Test>::contains_key(new_location_hash, product_id));
-
-		// Verify event
-		System::assert_last_event(
-			Event::EventAdded {
-				product_id,
-				event_type: EventType::QualityCheck,
-			}
-			.into(),
-		);
-	});
-}
-
-#[test]
-fn add_event_fails_for_nonexistent_tracking() {
-	new_test_ext().execute_with(|| {
-		let user = AccountId32::from([1u8; 32]);
-		let product_id = 999u32;
+		let creator = AccountId32::from([1u8; 32]);
+		let item_id = [1u8; 32];
+		let long_status = vec![0u8; 100]; // Exceeds MaxStatusLength (64)
 
 		assert_noop!(
-			SupplyChainTracking::add_event(
-				RuntimeOrigin::signed(user),
-				product_id,
-				EventType::Shipped,
-				b"Location".to_vec(),
-				b"Notes".to_vec()
+			SupplyChainTracking::create_item(
+				RuntimeOrigin::signed(creator),
+				item_id,
+				1u32,
+				long_status,
+				None,
+				b"data".to_vec()
 			),
-			Error::<Test>::RecordNotFound
+			Error::<Test>::StatusTooLong
 		);
 	});
 }
 
 #[test]
-fn add_event_fails_with_long_location() {
+fn create_item_fails_with_long_location() {
 	new_test_ext().execute_with(|| {
-		let user = AccountId32::from([1u8; 32]);
-		let product_id = 1u32;
-		let company_id = 1u32;
-
-		// Create tracking record
-		assert_ok!(SupplyChainTracking::create_tracking(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			company_id,
-			b"Factory A".to_vec()
-		));
-
+		let creator = AccountId32::from([1u8; 32]);
+		let item_id = [1u8; 32];
 		let long_location = vec![0u8; 200]; // Exceeds MaxLocationLength (128)
 
 		assert_noop!(
-			SupplyChainTracking::add_event(
-				RuntimeOrigin::signed(user),
-				product_id,
-				EventType::Shipped,
-				long_location,
-				b"Notes".to_vec()
+			SupplyChainTracking::create_item(
+				RuntimeOrigin::signed(creator),
+				item_id,
+				1u32,
+				b"Created".to_vec(),
+				Some(long_location),
+				b"data".to_vec()
 			),
 			Error::<Test>::LocationTooLong
 		);
@@ -206,115 +135,78 @@ fn add_event_fails_with_long_location() {
 }
 
 #[test]
-fn add_event_fails_with_long_notes() {
+fn create_item_fails_with_long_data() {
 	new_test_ext().execute_with(|| {
-		let user = AccountId32::from([1u8; 32]);
-		let product_id = 1u32;
-		let company_id = 1u32;
-
-		// Create tracking record
-		assert_ok!(SupplyChainTracking::create_tracking(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			company_id,
-			b"Factory A".to_vec()
-		));
-
-		let long_notes = vec![0u8; 600]; // Exceeds MaxNotesLength (512)
+		let creator = AccountId32::from([1u8; 32]);
+		let item_id = [1u8; 32];
+		let long_data = vec![0u8; 2000]; // Exceeds MaxEncryptedDataLength (1024)
 
 		assert_noop!(
-			SupplyChainTracking::add_event(
-				RuntimeOrigin::signed(user),
-				product_id,
-				EventType::Shipped,
-				b"Location".to_vec(),
-				long_notes
+			SupplyChainTracking::create_item(
+				RuntimeOrigin::signed(creator),
+				item_id,
+				1u32,
+				b"Created".to_vec(),
+				None,
+				long_data
 			),
-			Error::<Test>::NotesTooLong
+			Error::<Test>::EncryptedDataTooLong
 		);
 	});
 }
 
 #[test]
-fn add_multiple_events_works() {
+fn append_record_works() {
 	new_test_ext().execute_with(|| {
-		let user = AccountId32::from([1u8; 32]);
-		let product_id = 1u32;
-		let company_id = 1u32;
+		System::set_block_number(1);
+		let creator = AccountId32::from([1u8; 32]);
+		let recorder = AccountId32::from([2u8; 32]);
+		let item_id = [1u8; 32];
+		let chain_id = 1u32;
 
-		// Create tracking record
-		assert_ok!(SupplyChainTracking::create_tracking(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			company_id,
-			b"Factory A".to_vec()
+		// Create item
+		assert_ok!(SupplyChainTracking::create_item(
+			RuntimeOrigin::signed(creator.clone()),
+			item_id,
+			chain_id,
+			b"Created".to_vec(),
+			Some(b"Factory A".to_vec()),
+			b"initial_data".to_vec()
 		));
 
-		// Add multiple events
-		assert_ok!(SupplyChainTracking::add_event(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			EventType::Manufactured,
-			b"Factory A".to_vec(),
-			b"Manufacturing complete".to_vec()
+		// Get first record hash
+		let record0 = crate::ItemRecords::<Test>::get(&item_id, 0).unwrap();
+		let record0_hash = record0.record_hash;
+
+		System::set_block_number(2);
+
+		// Append second record
+		assert_ok!(SupplyChainTracking::append_record(
+			RuntimeOrigin::signed(recorder.clone()),
+			item_id,
+			b"Manufactured".to_vec(),
+			Some(b"Factory A".to_vec()),
+			b"second_record_data".to_vec()
 		));
 
-		assert_ok!(SupplyChainTracking::add_event(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			EventType::QualityCheck,
-			b"Factory A".to_vec(),
-			b"QC passed".to_vec()
-		));
+		// Verify metadata updated
+		let metadata = crate::Items::<Test>::get(&item_id).unwrap();
+		assert_eq!(metadata.record_count, 2);
+		assert_eq!(metadata.latest_hash, crate::ItemRecords::<Test>::get(&item_id, 1).unwrap().record_hash);
 
-		assert_ok!(SupplyChainTracking::add_event(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			EventType::Shipped,
-			b"Warehouse B".to_vec(),
-			b"Shipped to warehouse".to_vec()
-		));
-
-		// Verify all events added
-		let record = crate::TrackingRecords::<Test>::get(product_id).unwrap();
-		assert_eq!(record.events.len(), 3);
-		assert_eq!(record.events[0].event_type, EventType::Manufactured);
-		assert_eq!(record.events[1].event_type, EventType::QualityCheck);
-		assert_eq!(record.events[2].event_type, EventType::Shipped);
-	});
-}
-
-#[test]
-fn update_status_works() {
-	new_test_ext().execute_with(|| {
-		let user = AccountId32::from([1u8; 32]);
-		let product_id = 1u32;
-		let company_id = 1u32;
-
-		// Create tracking record
-		assert_ok!(SupplyChainTracking::create_tracking(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			company_id,
-			b"Factory A".to_vec()
-		));
-
-		// Update status
-		assert_ok!(SupplyChainTracking::update_status(
-			RuntimeOrigin::signed(user),
-			product_id,
-			TrackingStatus::InProgress
-		));
-
-		// Verify status change
-		let record = crate::TrackingRecords::<Test>::get(product_id).unwrap();
-		assert_eq!(record.current_status, TrackingStatus::InProgress);
+		// Verify second record
+		let record1 = crate::ItemRecords::<Test>::get(&item_id, 1).unwrap();
+		assert_eq!(record1.sequence, 1);
+		assert_eq!(record1.status.to_vec(), b"Manufactured");
+		assert_eq!(record1.recorder, recorder);
+		assert_eq!(record1.previous_hash, record0_hash); // Links to first record
 
 		// Verify event
 		System::assert_last_event(
-			Event::StatusUpdated {
-				product_id,
-				status: TrackingStatus::InProgress,
+			Event::RecordAppended {
+				item_id,
+				sequence: 1,
+				recorder,
 			}
 			.into(),
 		);
@@ -322,63 +214,109 @@ fn update_status_works() {
 }
 
 #[test]
-fn update_status_fails_for_nonexistent_tracking() {
+fn append_record_fails_for_nonexistent_item() {
 	new_test_ext().execute_with(|| {
-		let user = AccountId32::from([1u8; 32]);
-		let product_id = 999u32;
+		let recorder = AccountId32::from([1u8; 32]);
+		let item_id = [99u8; 32];
 
 		assert_noop!(
-			SupplyChainTracking::update_status(
-				RuntimeOrigin::signed(user),
-				product_id,
-				TrackingStatus::Completed
+			SupplyChainTracking::append_record(
+				RuntimeOrigin::signed(recorder),
+				item_id,
+				b"Status".to_vec(),
+				None,
+				b"data".to_vec()
 			),
-			Error::<Test>::RecordNotFound
+			Error::<Test>::ItemNotFound
 		);
 	});
 }
 
 #[test]
-fn update_location_works() {
+fn query_item_history_works() {
 	new_test_ext().execute_with(|| {
-		let user = AccountId32::from([1u8; 32]);
-		let product_id = 1u32;
-		let company_id = 1u32;
-		let initial_location = b"Factory A".to_vec();
+		System::set_block_number(1);
+		let creator = AccountId32::from([1u8; 32]);
+		let item_id = [1u8; 32];
+		let chain_id = 1u32;
 
-		// Create tracking record
-		assert_ok!(SupplyChainTracking::create_tracking(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			company_id,
-			initial_location.clone()
+		// Create item
+		assert_ok!(SupplyChainTracking::create_item(
+			RuntimeOrigin::signed(creator.clone()),
+			item_id,
+			chain_id,
+			b"Created".to_vec(),
+			None,
+			b"data0".to_vec()
 		));
 
-		let new_location = b"Distribution Center C".to_vec();
+		// Append multiple records
+		for i in 1..=3 {
+			System::set_block_number(i + 1);
+			assert_ok!(SupplyChainTracking::append_record(
+				RuntimeOrigin::signed(creator.clone()),
+				item_id,
+				format!("Status{}", i).as_bytes().to_vec(),
+				None,
+				format!("data{}", i).as_bytes().to_vec()
+			));
+		}
 
-		// Update location
-		assert_ok!(SupplyChainTracking::update_location(
-			RuntimeOrigin::signed(user),
-			product_id,
-			new_location.clone()
+		// Query history
+		assert_ok!(SupplyChainTracking::query_item_history(
+			RuntimeOrigin::signed(creator),
+			item_id
 		));
 
-		// Verify location change
-		let record = crate::TrackingRecords::<Test>::get(product_id).unwrap();
-		assert_eq!(record.current_location.to_vec(), new_location);
+		// Verify event with all records
+		let expected_event = Event::ItemHistoryQueried {
+			item_id,
+			record_count: 4,
+		};
+		System::assert_last_event(expected_event.into());
+	});
+}
 
-		// Verify location index updated
-		let old_location_hash = SupplyChainTracking::hash_location(&initial_location);
-		assert!(!crate::LocationProducts::<Test>::contains_key(old_location_hash, product_id));
+#[test]
+fn verify_item_chain_works_for_valid_chain() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let creator = AccountId32::from([1u8; 32]);
+		let item_id = [1u8; 32];
+		let chain_id = 1u32;
 
-		let new_location_hash = SupplyChainTracking::hash_location(&new_location);
-		assert!(crate::LocationProducts::<Test>::contains_key(new_location_hash, product_id));
+		// Create item with multiple records
+		assert_ok!(SupplyChainTracking::create_item(
+			RuntimeOrigin::signed(creator.clone()),
+			item_id,
+			chain_id,
+			b"Created".to_vec(),
+			None,
+			b"data0".to_vec()
+		));
+
+		for i in 1..=5 {
+			System::set_block_number(i + 1);
+			assert_ok!(SupplyChainTracking::append_record(
+				RuntimeOrigin::signed(creator.clone()),
+				item_id,
+				format!("Status{}", i).as_bytes().to_vec(),
+				None,
+				format!("data{}", i).as_bytes().to_vec()
+			));
+		}
+
+		// Verify chain integrity
+		assert_ok!(SupplyChainTracking::verify_item_chain(
+			RuntimeOrigin::signed(creator),
+			item_id
+		));
 
 		// Verify event
 		System::assert_last_event(
-			Event::LocationUpdated {
-				product_id,
-				new_location,
+			Event::ItemChainVerified {
+				item_id,
+				is_valid: true,
 			}
 			.into(),
 		);
@@ -386,128 +324,217 @@ fn update_location_works() {
 }
 
 #[test]
-fn update_location_fails_for_nonexistent_tracking() {
+fn complete_item_lifecycle() {
 	new_test_ext().execute_with(|| {
-		let user = AccountId32::from([1u8; 32]);
-		let product_id = 999u32;
+		System::set_block_number(1);
+		let manufacturer = AccountId32::from([1u8; 32]);
+		let quality_checker = AccountId32::from([2u8; 32]);
+		let shipper = AccountId32::from([3u8; 32]);
+		let warehouse = AccountId32::from([4u8; 32]);
+		let item_id = [1u8; 32];
+		let chain_id = 1u32;
 
-		assert_noop!(
-			SupplyChainTracking::update_location(
-				RuntimeOrigin::signed(user),
-				product_id,
-				b"New Location".to_vec()
-			),
-			Error::<Test>::RecordNotFound
-		);
-	});
-}
-
-#[test]
-fn update_location_fails_with_long_location() {
-	new_test_ext().execute_with(|| {
-		let user = AccountId32::from([1u8; 32]);
-		let product_id = 1u32;
-		let company_id = 1u32;
-
-		// Create tracking record
-		assert_ok!(SupplyChainTracking::create_tracking(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			company_id,
-			b"Factory A".to_vec()
+		// Step 1: Item created at factory
+		assert_ok!(SupplyChainTracking::create_item(
+			RuntimeOrigin::signed(manufacturer.clone()),
+			item_id,
+			chain_id,
+			b"Raw Material".to_vec(),
+			Some(b"Factory A, Beijing".to_vec()),
+			b"encrypted_raw_material_data".to_vec()
 		));
 
-		let long_location = vec![0u8; 200]; // Exceeds MaxLocationLength (128)
-
-		assert_noop!(
-			SupplyChainTracking::update_location(
-				RuntimeOrigin::signed(user),
-				product_id,
-				long_location
-			),
-			Error::<Test>::LocationTooLong
-		);
-	});
-}
-
-#[test]
-fn complete_tracking_workflow() {
-	new_test_ext().execute_with(|| {
-		let user = AccountId32::from([1u8; 32]);
-		let product_id = 1u32;
-		let company_id = 1u32;
-
-		// Step 1: Create tracking
-		assert_ok!(SupplyChainTracking::create_tracking(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			company_id,
-			b"Factory A, Beijing".to_vec()
-		));
-
-		// Step 2: Manufactured
-		assert_ok!(SupplyChainTracking::add_event(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			EventType::Manufactured,
-			b"Factory A, Beijing".to_vec(),
-			b"Product manufactured successfully".to_vec()
-		));
-		assert_ok!(SupplyChainTracking::update_status(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			TrackingStatus::InProgress
+		// Step 2: Manufacturing
+		System::set_block_number(2);
+		assert_ok!(SupplyChainTracking::append_record(
+			RuntimeOrigin::signed(manufacturer.clone()),
+			item_id,
+			b"Manufactured".to_vec(),
+			Some(b"Factory A, Beijing".to_vec()),
+			b"encrypted_manufacturing_data".to_vec()
 		));
 
 		// Step 3: Quality check
-		assert_ok!(SupplyChainTracking::add_event(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			EventType::QualityCheck,
-			b"Factory A, Beijing".to_vec(),
-			b"Quality inspection passed".to_vec()
+		System::set_block_number(3);
+		assert_ok!(SupplyChainTracking::append_record(
+			RuntimeOrigin::signed(quality_checker.clone()),
+			item_id,
+			b"QC Passed".to_vec(),
+			Some(b"QC Department, Factory A".to_vec()),
+			b"encrypted_qc_data".to_vec()
 		));
 
-		// Step 4: Shipped
-		assert_ok!(SupplyChainTracking::add_event(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			EventType::Shipped,
-			b"In Transit to Warehouse B".to_vec(),
-			b"Shipped via FedEx tracking #12345".to_vec()
+		// Step 4: Packaging and ready to ship
+		System::set_block_number(4);
+		assert_ok!(SupplyChainTracking::append_record(
+			RuntimeOrigin::signed(manufacturer.clone()),
+			item_id,
+			b"Packaged".to_vec(),
+			Some(b"Packaging Dept, Factory A".to_vec()),
+			b"encrypted_packaging_data".to_vec()
 		));
 
-		// Step 5: In transit
-		assert_ok!(SupplyChainTracking::add_event(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			EventType::InTransit,
-			b"Shanghai Port".to_vec(),
-			b"Arrived at port for customs clearance".to_vec()
+		// Step 5: Shipped
+		System::set_block_number(5);
+		assert_ok!(SupplyChainTracking::append_record(
+			RuntimeOrigin::signed(shipper.clone()),
+			item_id,
+			b"In Transit".to_vec(),
+			Some(b"En route to Warehouse B".to_vec()),
+			b"encrypted_shipping_data".to_vec()
 		));
 
-		// Step 6: Delivered
-		assert_ok!(SupplyChainTracking::add_event(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			EventType::Delivered,
-			b"Warehouse B, Los Angeles".to_vec(),
-			b"Product delivered to warehouse".to_vec()
-		));
-		assert_ok!(SupplyChainTracking::update_status(
-			RuntimeOrigin::signed(user.clone()),
-			product_id,
-			TrackingStatus::Completed
+		// Step 6: Arrived at warehouse
+		System::set_block_number(6);
+		assert_ok!(SupplyChainTracking::append_record(
+			RuntimeOrigin::signed(warehouse.clone()),
+			item_id,
+			b"Delivered".to_vec(),
+			Some(b"Warehouse B, Los Angeles".to_vec()),
+			b"encrypted_delivery_data".to_vec()
 		));
 
-		// Verify final state
-		let record = crate::TrackingRecords::<Test>::get(product_id).unwrap();
-		assert_eq!(record.current_status, TrackingStatus::Completed);
-		assert_eq!(record.current_location.to_vec(), b"Warehouse B, Los Angeles".to_vec());
-		assert_eq!(record.events.len(), 5);
+		// Verify complete chain
+		let metadata = crate::Items::<Test>::get(&item_id).unwrap();
+		assert_eq!(metadata.record_count, 6);
+		assert_eq!(metadata.creator, manufacturer);
 
-		// Verify location index points to final location
-		let final_location_hash = SupplyChainTracking::hash_location(b"Warehouse B, Los Angeles");
-		assert!(crate::LocationProducts::<Test>::contains_key(final_location_hash, product_id));
+		// Verify all records exist and are linked
+		for seq in 0..6 {
+			assert!(crate::ItemRecords::<Test>::contains_key(&item_id, seq));
+		}
+
+		// Verify hash chain integrity
+		for seq in 1..6 {
+			let current_record = crate::ItemRecords::<Test>::get(&item_id, seq).unwrap();
+			let previous_record = crate::ItemRecords::<Test>::get(&item_id, seq - 1).unwrap();
+			assert_eq!(current_record.previous_hash, previous_record.record_hash);
+		}
+
+		// Verify chain integrity check
+		assert_ok!(SupplyChainTracking::verify_item_chain(
+			RuntimeOrigin::signed(warehouse),
+			item_id
+		));
+	});
+}
+
+#[test]
+fn get_item_history_helper_works() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let creator = AccountId32::from([1u8; 32]);
+		let item_id = [1u8; 32];
+		let chain_id = 1u32;
+
+		// Create item
+		assert_ok!(SupplyChainTracking::create_item(
+			RuntimeOrigin::signed(creator.clone()),
+			item_id,
+			chain_id,
+			b"Created".to_vec(),
+			None,
+			b"data".to_vec()
+		));
+
+		// Add more records
+		for i in 1..=3 {
+			System::set_block_number(i + 1);
+			assert_ok!(SupplyChainTracking::append_record(
+				RuntimeOrigin::signed(creator.clone()),
+				item_id,
+				format!("Status{}", i).as_bytes().to_vec(),
+				None,
+				b"data".to_vec()
+			));
+		}
+
+		// Use helper function
+		let history = SupplyChainTracking::get_item_history(item_id).unwrap();
+		assert_eq!(history.len(), 4);
+
+		// Verify sequence order
+		for (i, record) in history.iter().enumerate() {
+			assert_eq!(record.sequence, i as u32);
+		}
+	});
+}
+
+#[test]
+fn hash_computation_is_deterministic() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1);
+		let creator = AccountId32::from([1u8; 32]);
+		let item_id = [1u8; 32];
+		let chain_id = 1u32;
+
+		// Create two identical items with different IDs
+		let item_id_2 = [2u8; 32];
+
+		assert_ok!(SupplyChainTracking::create_item(
+			RuntimeOrigin::signed(creator.clone()),
+			item_id,
+			chain_id,
+			b"Created".to_vec(),
+			None,
+			b"same_data".to_vec()
+		));
+
+		let record1 = crate::ItemRecords::<Test>::get(&item_id, 0).unwrap();
+		let hash1 = record1.record_hash;
+
+		// Create second item (hash should be different because item_id is different)
+		assert_ok!(SupplyChainTracking::create_item(
+			RuntimeOrigin::signed(creator.clone()),
+			item_id_2,
+			chain_id,
+			b"Created".to_vec(),
+			None,
+			b"same_data".to_vec()
+		));
+
+		let record2 = crate::ItemRecords::<Test>::get(&item_id_2, 0).unwrap();
+		let hash2 = record2.record_hash;
+
+		// Hashes should be different (different item IDs)
+		assert_ne!(hash1, hash2);
+	});
+}
+
+#[test]
+fn multiple_chains_work_independently() {
+	new_test_ext().execute_with(|| {
+		let creator1 = AccountId32::from([1u8; 32]);
+		let creator2 = AccountId32::from([2u8; 32]);
+		let item_id_1 = [1u8; 32];
+		let item_id_2 = [2u8; 32];
+		let chain_id_1 = 1u32;
+		let chain_id_2 = 2u32;
+
+		// Create items for different chains
+		assert_ok!(SupplyChainTracking::create_item(
+			RuntimeOrigin::signed(creator1.clone()),
+			item_id_1,
+			chain_id_1,
+			b"Created".to_vec(),
+			None,
+			b"data1".to_vec()
+		));
+
+		assert_ok!(SupplyChainTracking::create_item(
+			RuntimeOrigin::signed(creator2.clone()),
+			item_id_2,
+			chain_id_2,
+			b"Created".to_vec(),
+			None,
+			b"data2".to_vec()
+		));
+
+		// Verify chain separation
+		assert!(crate::ChainItems::<Test>::contains_key(chain_id_1, &item_id_1));
+		assert!(!crate::ChainItems::<Test>::contains_key(chain_id_1, &item_id_2));
+
+		assert!(crate::ChainItems::<Test>::contains_key(chain_id_2, &item_id_2));
+		assert!(!crate::ChainItems::<Test>::contains_key(chain_id_2, &item_id_1));
 	});
 }

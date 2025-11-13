@@ -1,6 +1,6 @@
 [package]
-name = "pallet-company-management"
-description = "FRAME pallet for company management in supply chain"
+name = "pallet-business-management"
+description = "FRAME pallet for business management in supply chain"
 version = "0.1.0"
 license.workspace = true
 authors.workspace = true

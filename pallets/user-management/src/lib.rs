@@ -74,6 +74,10 @@ pub mod pallet {
 		pub email_hash: [u8; 32],
 		/// Account ID (wallet address)
 		pub account_id: T::AccountId,
+		/// User index for wallet derivation (m/44'/354'/user_index')
+		pub user_index: u32,
+		/// Derived public key (32 bytes)
+		pub derived_public_key: [u8; 32],
 		/// Verification status
 		pub is_verified: bool,
 		/// Registration timestamp
@@ -153,8 +157,13 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// User registered successfully
-		UserRegistered { account: T::AccountId, email_hash: [u8; 32] },
+		/// User registered successfully with derived wallet
+		UserRegistered {
+			account: T::AccountId,
+			email_hash: [u8; 32],
+			user_index: u32,
+			derived_public_key: [u8; 32],
+		},
 		/// Email linked to account
 		EmailLinked { account: T::AccountId, email_hash: [u8; 32] },
 		/// Wallet linked to account
@@ -200,13 +209,17 @@ pub mod pallet {
 	/// Dispatchable functions
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// Register a new user
+		/// Register a new user with hierarchical wallet derivation
+		///
+		/// The derived_public_key should be generated off-chain using:
+		/// m/44'/354'/user_index' derivation path
 		#[pallet::call_index(0)]
 		#[pallet::weight(T::WeightInfo::register_user())]
 		pub fn register_user(
 			origin: OriginFor<T>,
 			name: Vec<u8>,
 			email_hash: [u8; 32],
+			derived_public_key: [u8; 32],
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
@@ -225,11 +238,16 @@ pub mod pallet {
 
 			let now = frame_system::Pallet::<T>::block_number();
 
-			// Create user profile
+			// Get current user count as the user index
+			let user_index = UserCount::<T>::get();
+
+			// Create user profile with derived wallet information
 			let profile = UserProfile {
 				name: bounded_name,
 				email_hash,
 				account_id: who.clone(),
+				user_index,
+				derived_public_key,
 				is_verified: false,
 				registered_at: now,
 				updated_at: now,
@@ -244,17 +262,76 @@ pub mod pallet {
 			// Increment user count
 			UserCount::<T>::mutate(|count| *count = count.saturating_add(1));
 
-			// Emit event
+			// Emit event with derived wallet info
 			Self::deposit_event(Event::UserRegistered {
 				account: who,
 				email_hash,
+				user_index,
+				derived_public_key,
 			});
 
 			Ok(())
 		}
 
-		/// Update user profile
+		/// Register a new user (legacy - for backward compatibility)
+		#[pallet::call_index(7)]
+		#[pallet::weight(T::WeightInfo::register_user())]
+		pub fn register_user_legacy(
+			origin: OriginFor<T>,
+			name: Vec<u8>,
+			email_hash: [u8; 32],
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+
+			// For legacy registration, use zero public key
+			// This should only be used for testing
+			let derived_public_key = [0u8; 32];
+
+			Self::register_user(
+				frame_system::RawOrigin::Signed(who).into(),
+				name,
+				email_hash,
+				derived_public_key,
+			)
+		}
+
+		/// Link email to existing account
 		#[pallet::call_index(1)]
+		#[pallet::weight(T::WeightInfo::link_email())]
+		pub fn link_email(
+			origin: OriginFor<T>,
+			email_hash: [u8; 32],
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+
+			// Ensure user exists
+			ensure!(Users::<T>::contains_key(&who), Error::<T>::UserNotFound);
+
+			// Ensure email not already registered
+			ensure!(
+				!EmailToAccount::<T>::contains_key(&email_hash),
+				Error::<T>::EmailAlreadyRegistered
+			);
+
+			// Update user's email
+			Users::<T>::try_mutate(&who, |maybe_profile| -> DispatchResult {
+				let profile = maybe_profile.as_mut().ok_or(Error::<T>::UserNotFound)?;
+				profile.email_hash = email_hash;
+				profile.updated_at = frame_system::Pallet::<T>::block_number();
+				Ok(())
+			})?;
+
+			// Store email to account mapping
+			EmailToAccount::<T>::insert(email_hash, &who);
+
+			// Emit event
+			Self::deposit_event(Event::EmailLinked { account: who, email_hash });
+
+			Ok(())
+		}
+
+		/// Update user profile
+		#[pallet::call_index(2)]
 		#[pallet::weight(T::WeightInfo::update_profile())]
 		pub fn update_profile(
 			origin: OriginFor<T>,
@@ -286,7 +363,7 @@ pub mod pallet {
 		}
 
 		/// Submit verification request
-		#[pallet::call_index(2)]
+		#[pallet::call_index(3)]
 		#[pallet::weight(T::WeightInfo::submit_verification())]
 		pub fn submit_verification(
 			origin: OriginFor<T>,
@@ -327,7 +404,7 @@ pub mod pallet {
 		}
 
 		/// Approve verification request (requires root/sudo)
-		#[pallet::call_index(3)]
+		#[pallet::call_index(4)]
 		#[pallet::weight(T::WeightInfo::approve_verification())]
 		pub fn approve_verification(
 			origin: OriginFor<T>,
@@ -360,7 +437,7 @@ pub mod pallet {
 		}
 
 		/// Reject verification request (requires root/sudo)
-		#[pallet::call_index(4)]
+		#[pallet::call_index(5)]
 		#[pallet::weight(T::WeightInfo::reject_verification())]
 		pub fn reject_verification(
 			origin: OriginFor<T>,

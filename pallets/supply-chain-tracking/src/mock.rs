@@ -23,17 +23,18 @@ impl frame_system::Config for Test {
 }
 
 parameter_types! {
+	pub const MaxStatusLength: u32 = 64;
 	pub const MaxLocationLength: u32 = 128;
-	pub const MaxNotesLength: u32 = 512;
-	pub const MaxEvents: u32 = 100;
+	pub const MaxEncryptedDataLength: u32 = 1024;
+	pub const MaxItemRecords: u32 = 1000;
 }
 
 impl pallet_supply_chain_tracking::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
-	type WeightInfo = ();
+	type MaxStatusLength = MaxStatusLength;
 	type MaxLocationLength = MaxLocationLength;
-	type MaxNotesLength = MaxNotesLength;
-	type MaxEvents = MaxEvents;
+	type MaxEncryptedDataLength = MaxEncryptedDataLength;
+	type MaxItemRecords = MaxItemRecords;
 }
 
 // Build genesis storage according to the mock runtime.
