@@ -10,7 +10,7 @@ default-members = ["node", "runtime"]
 members = [
     "node",
     "pallets/user-management",
-    "pallets/company-management",
+    "pallets/business-management",
     "pallets/product-management",
     "pallets/supply-chain-tracking",
     "pallets/role-permissions",
@@ -24,7 +24,7 @@ resolver = "2"
 # Local dependencies
 supply-chain-runtime = { path = "./runtime", default-features = false }
 pallet-user-management = { path = "./pallets/user-management", default-features = false }
-pallet-company-management = { path = "./pallets/company-management", default-features = false }
+pallet-business-management = { path = "./pallets/business-management", default-features = false }
 pallet-product-management = { path = "./pallets/product-management", default-features = false }
 pallet-supply-chain-tracking = { path = "./pallets/supply-chain-tracking", default-features = false }
 pallet-role-permissions = { path = "./pallets/role-permissions", default-features = false }

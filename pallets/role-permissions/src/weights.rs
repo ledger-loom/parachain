@@ -40,8 +40,8 @@ impl<T: frame::deps::frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: UserRoles (max_values: None, max_size: Some(100), added: 2575, mode: MaxEncodedLen)
 	/// Storage: Roles (r:0 w:1)
 	/// Proof: Roles (max_values: None, max_size: Some(500), added: 2975, mode: MaxEncodedLen)
-	/// Storage: CompanyRoles (r:0 w:1)
-	/// Proof: CompanyRoles (max_values: None, max_size: Some(16), added: 2491, mode: MaxEncodedLen)
+	/// Storage: BusinessRoles (r:0 w:1)
+	/// Proof: BusinessRoles (max_values: None, max_size: Some(16), added: 2491, mode: MaxEncodedLen)
 	/// Storage: NextRoleId (r:1 w:1)
 	/// Proof: NextRoleId (max_values: Some(1), max_size: Some(4), added: 499, mode: MaxEncodedLen)
 	fn create_role() -> Weight {

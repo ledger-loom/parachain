@@ -24,7 +24,7 @@ smallvec = "1.11.0"
 
 # Local
 pallet-user-management = { path = "../pallets/user-management", default-features = false }
-pallet-chain-management = { path = "../pallets/chain-management", default-features = false }
+pallet-business-management = { path = "../pallets/business-management", default-features = false }
 pallet-product-management = { path = "../pallets/product-management", default-features = false }
 pallet-supply-chain-tracking = { path = "../pallets/supply-chain-tracking", default-features = false }
 pallet-role-permissions = { path = "../pallets/role-permissions", default-features = false }
@@ -87,7 +87,7 @@ std = [
 	"serde",
 	"substrate-wasm-builder",
 	"pallet-user-management/std",
-	"pallet-chain-management/std",
+	"pallet-business-management/std",
 	"pallet-product-management/std",
 	"pallet-supply-chain-tracking/std",
 	"pallet-role-permissions/std",
@@ -99,7 +99,7 @@ runtime-benchmarks = [
 	"hex-literal",
 	"polkadot-sdk/runtime-benchmarks",
 	"pallet-user-management/runtime-benchmarks",
-	"pallet-chain-management/runtime-benchmarks",
+	"pallet-business-management/runtime-benchmarks",
 	"pallet-product-management/runtime-benchmarks",
 	"pallet-supply-chain-tracking/runtime-benchmarks",
 	"pallet-role-permissions/runtime-benchmarks",
@@ -110,7 +110,7 @@ runtime-benchmarks = [
 try-runtime = [
 	"polkadot-sdk/try-runtime",
 	"pallet-user-management/try-runtime",
-	"pallet-chain-management/try-runtime",
+	"pallet-business-management/try-runtime",
 	"pallet-product-management/try-runtime",
 	"pallet-supply-chain-tracking/try-runtime",
 	"pallet-role-permissions/try-runtime",

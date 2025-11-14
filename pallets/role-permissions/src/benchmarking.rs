@@ -16,13 +16,13 @@ mod benchmarks {
 	#[benchmark]
 	fn create_role() {
 		let caller: T::AccountId = whitelisted_caller();
-		let company_id = 1u32;
+		let business_id = 1u32;
 
 		// Setup: Assign owner role to caller first
 		let _ = RolePermissions::<T>::assign_role(
 			RawOrigin::Root.into(),
 			caller.clone(),
-			company_id,
+			business_id,
 			0, // Owner role
 		);
 
@@ -36,7 +36,7 @@ mod benchmarks {
 		#[extrinsic_call]
 		create_role(
 			RawOrigin::Signed(caller.clone()),
-			company_id,
+			business_id,
 			role_name,
 			permissions,
 		);
@@ -49,13 +49,13 @@ mod benchmarks {
 	fn assign_role() {
 		let admin: T::AccountId = whitelisted_caller();
 		let user: T::AccountId = account("user", 0, 0);
-		let company_id = 1u32;
+		let business_id = 1u32;
 
 		// Setup: Assign owner role to admin first
 		let _ = RolePermissions::<T>::assign_role(
 			RawOrigin::Root.into(),
 			admin.clone(),
-			company_id,
+			business_id,
 			0, // Owner role
 		);
 
@@ -65,52 +65,52 @@ mod benchmarks {
 		assign_role(
 			RawOrigin::Signed(admin),
 			user.clone(),
-			company_id,
+			business_id,
 			role_id,
 		);
 
 		// Verify role was assigned
-		assert!(UserRoles::<T>::contains_key(&user, company_id));
+		assert!(UserRoles::<T>::contains_key(&user, business_id));
 	}
 
 	#[benchmark]
 	fn revoke_role() {
 		let admin: T::AccountId = whitelisted_caller();
 		let user: T::AccountId = account("user", 0, 0);
-		let company_id = 1u32;
+		let business_id = 1u32;
 
 		// Setup: Assign roles
 		let _ = RolePermissions::<T>::assign_role(
 			RawOrigin::Root.into(),
 			admin.clone(),
-			company_id,
+			business_id,
 			0, // Owner role
 		);
 
 		let _ = RolePermissions::<T>::assign_role(
 			RawOrigin::Signed(admin.clone()).into(),
 			user.clone(),
-			company_id,
+			business_id,
 			2, // Warehouse role
 		);
 
 		#[extrinsic_call]
-		revoke_role(RawOrigin::Signed(admin), user.clone(), company_id);
+		revoke_role(RawOrigin::Signed(admin), user.clone(), business_id);
 
 		// Verify role was revoked
-		assert!(!UserRoles::<T>::contains_key(&user, company_id));
+		assert!(!UserRoles::<T>::contains_key(&user, business_id));
 	}
 
 	#[benchmark]
 	fn update_role_permissions() {
 		let caller: T::AccountId = whitelisted_caller();
-		let company_id = 1u32;
+		let business_id = 1u32;
 
 		// Setup: Assign owner role and create custom role
 		let _ = RolePermissions::<T>::assign_role(
 			RawOrigin::Root.into(),
 			caller.clone(),
-			company_id,
+			business_id,
 			0, // Owner role
 		);
 
@@ -119,7 +119,7 @@ mod benchmarks {
 
 		let _ = RolePermissions::<T>::create_role(
 			RawOrigin::Signed(caller.clone()).into(),
-			company_id,
+			business_id,
 			role_name,
 			initial_permissions,
 		);

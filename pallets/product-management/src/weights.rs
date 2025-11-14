@@ -38,8 +38,8 @@ pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame::deps::frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: Products (r:0 w:1)
 	/// Proof: Products (max_values: None, max_size: Some(500), added: 2975, mode: MaxEncodedLen)
-	/// Storage: CompanyProducts (r:0 w:1)
-	/// Proof: CompanyProducts (max_values: None, max_size: Some(64), added: 2539, mode: MaxEncodedLen)
+	/// Storage: BusinessProducts (r:0 w:1)
+	/// Proof: BusinessProducts (max_values: None, max_size: Some(64), added: 2539, mode: MaxEncodedLen)
 	/// Storage: NextProductId (r:1 w:1)
 	/// Proof: NextProductId (max_values: Some(1), max_size: Some(4), added: 499, mode: MaxEncodedLen)
 	/// Storage: Categories (r:1 w:1)

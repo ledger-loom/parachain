@@ -22,7 +22,7 @@ fn system_roles_initialized_correctly() {
 		let manager_role = crate::Roles::<Test>::get(1).unwrap();
 		assert_eq!(manager_role.name.to_vec(), b"Manager".to_vec());
 		assert!(manager_role.is_system_role);
-		assert_eq!(manager_role.permissions.len(), 9); // All except ManageCompany
+		assert_eq!(manager_role.permissions.len(), 9); // All except ManageBusiness
 
 		// Verify Warehouse role (role_id: 2)
 		let warehouse_role = crate::Roles::<Test>::get(2).unwrap();
@@ -45,13 +45,13 @@ fn system_roles_initialized_correctly() {
 fn create_role_works() {
 	new_test_ext().execute_with(|| {
 		let owner = AccountId32::from([1u8; 32]);
-		let company_id = 1u32;
+		let business_id = 1u32;
 
 		// First, assign owner role to user
 		assert_ok!(RolePermissions::assign_role(
 			RuntimeOrigin::root(),
 			owner.clone(),
-			company_id,
+			business_id,
 			0 // Owner role
 		));
 
@@ -61,7 +61,7 @@ fn create_role_works() {
 
 		assert_ok!(RolePermissions::create_role(
 			RuntimeOrigin::signed(owner.clone()),
-			company_id,
+			business_id,
 			role_name.clone(),
 			permissions.clone()
 		));
@@ -70,7 +70,7 @@ fn create_role_works() {
 		let role_id = 5; // Next role after system roles (0-4)
 		let role = crate::Roles::<Test>::get(role_id).unwrap();
 		assert_eq!(role.name.to_vec(), role_name);
-		assert_eq!(role.company_id, Some(company_id));
+		assert_eq!(role.business_id, Some(business_id));
 		assert!(!role.is_system_role);
 		assert_eq!(role.permissions.to_vec(), permissions);
 
@@ -78,7 +78,7 @@ fn create_role_works() {
 		System::assert_last_event(
 			Event::RoleCreated {
 				role_id,
-				company_id: Some(company_id),
+				business_id: Some(business_id),
 				name: role_name,
 			}
 			.into(),
@@ -90,13 +90,13 @@ fn create_role_works() {
 fn create_role_fails_without_permission() {
 	new_test_ext().execute_with(|| {
 		let user = AccountId32::from([1u8; 32]);
-		let company_id = 1u32;
+		let business_id = 1u32;
 
 		// Try to create role without ManageRoles permission
 		assert_noop!(
 			RolePermissions::create_role(
 				RuntimeOrigin::signed(user),
-				company_id,
+				business_id,
 				b"TestRole".to_vec(),
 				vec![Permission::ViewProduct]
 			),
@@ -110,13 +110,13 @@ fn assign_role_works() {
 	new_test_ext().execute_with(|| {
 		let admin = AccountId32::from([1u8; 32]);
 		let user = AccountId32::from([2u8; 32]);
-		let company_id = 1u32;
+		let business_id = 1u32;
 
 		// Assign owner role to admin
 		assert_ok!(RolePermissions::assign_role(
 			RuntimeOrigin::root(),
 			admin.clone(),
-			company_id,
+			business_id,
 			0 // Owner role
 		));
 
@@ -124,12 +124,12 @@ fn assign_role_works() {
 		assert_ok!(RolePermissions::assign_role(
 			RuntimeOrigin::signed(admin),
 			user.clone(),
-			company_id,
+			business_id,
 			2 // Warehouse role
 		));
 
 		// Verify role assignment
-		let assigned_role_id = crate::UserRoles::<Test>::get(&user, company_id).unwrap();
+		let assigned_role_id = crate::UserRoles::<Test>::get(&user, business_id).unwrap();
 		assert_eq!(assigned_role_id, 2);
 
 		// Verify event
@@ -137,7 +137,7 @@ fn assign_role_works() {
 			Event::RoleAssigned {
 				user,
 				role_id: 2,
-				company_id,
+				business_id,
 			}
 			.into(),
 		);
@@ -149,13 +149,13 @@ fn assign_role_fails_if_already_assigned() {
 	new_test_ext().execute_with(|| {
 		let admin = AccountId32::from([1u8; 32]);
 		let user = AccountId32::from([2u8; 32]);
-		let company_id = 1u32;
+		let business_id = 1u32;
 
 		// Assign owner role to admin
 		assert_ok!(RolePermissions::assign_role(
 			RuntimeOrigin::root(),
 			admin.clone(),
-			company_id,
+			business_id,
 			0
 		));
 
@@ -163,16 +163,16 @@ fn assign_role_fails_if_already_assigned() {
 		assert_ok!(RolePermissions::assign_role(
 			RuntimeOrigin::signed(admin.clone()),
 			user.clone(),
-			company_id,
+			business_id,
 			2
 		));
 
-		// Try to assign another role to same user in same company
+		// Try to assign another role to same user in same business
 		assert_noop!(
 			RolePermissions::assign_role(
 				RuntimeOrigin::signed(admin),
 				user,
-				company_id,
+				business_id,
 				3
 			),
 			Error::<Test>::RoleAlreadyAssigned
@@ -185,13 +185,13 @@ fn revoke_role_works() {
 	new_test_ext().execute_with(|| {
 		let admin = AccountId32::from([1u8; 32]);
 		let user = AccountId32::from([2u8; 32]);
-		let company_id = 1u32;
+		let business_id = 1u32;
 
 		// Assign owner role to admin
 		assert_ok!(RolePermissions::assign_role(
 			RuntimeOrigin::root(),
 			admin.clone(),
-			company_id,
+			business_id,
 			0
 		));
 
@@ -199,7 +199,7 @@ fn revoke_role_works() {
 		assert_ok!(RolePermissions::assign_role(
 			RuntimeOrigin::signed(admin.clone()),
 			user.clone(),
-			company_id,
+			business_id,
 			2
 		));
 
@@ -207,17 +207,17 @@ fn revoke_role_works() {
 		assert_ok!(RolePermissions::revoke_role(
 			RuntimeOrigin::signed(admin),
 			user.clone(),
-			company_id
+			business_id
 		));
 
 		// Verify role was revoked
-		assert!(!crate::UserRoles::<Test>::contains_key(&user, company_id));
+		assert!(!crate::UserRoles::<Test>::contains_key(&user, business_id));
 
 		// Verify event
 		System::assert_last_event(
 			Event::RoleRevoked {
 				user,
-				company_id,
+				business_id,
 			}
 			.into(),
 		);
@@ -229,19 +229,19 @@ fn revoke_role_fails_if_no_role_assigned() {
 	new_test_ext().execute_with(|| {
 		let admin = AccountId32::from([1u8; 32]);
 		let user = AccountId32::from([2u8; 32]);
-		let company_id = 1u32;
+		let business_id = 1u32;
 
 		// Assign owner role to admin
 		assert_ok!(RolePermissions::assign_role(
 			RuntimeOrigin::root(),
 			admin.clone(),
-			company_id,
+			business_id,
 			0
 		));
 
 		// Try to revoke role from user with no role
 		assert_noop!(
-			RolePermissions::revoke_role(RuntimeOrigin::signed(admin), user, company_id),
+			RolePermissions::revoke_role(RuntimeOrigin::signed(admin), user, business_id),
 			Error::<Test>::NoRoleAssigned
 		);
 	});
@@ -251,20 +251,20 @@ fn revoke_role_fails_if_no_role_assigned() {
 fn update_role_permissions_works() {
 	new_test_ext().execute_with(|| {
 		let owner = AccountId32::from([1u8; 32]);
-		let company_id = 1u32;
+		let business_id = 1u32;
 
 		// Assign owner role to user
 		assert_ok!(RolePermissions::assign_role(
 			RuntimeOrigin::root(),
 			owner.clone(),
-			company_id,
+			business_id,
 			0
 		));
 
 		// Create a custom role
 		assert_ok!(RolePermissions::create_role(
 			RuntimeOrigin::signed(owner.clone()),
-			company_id,
+			business_id,
 			b"TestRole".to_vec(),
 			vec![Permission::ViewProduct]
 		));
@@ -309,64 +309,64 @@ fn update_role_permissions_fails_for_system_roles() {
 fn check_permission_works() {
 	new_test_ext().execute_with(|| {
 		let user = AccountId32::from([1u8; 32]);
-		let company_id = 1u32;
+		let business_id = 1u32;
 
 		// Assign warehouse role to user (has CreateProduct permission)
 		assert_ok!(RolePermissions::assign_role(
 			RuntimeOrigin::root(),
 			user.clone(),
-			company_id,
+			business_id,
 			2 // Warehouse role
 		));
 
 		// Check permission
 		assert!(RolePermissions::check_permission(
 			&user,
-			company_id,
+			business_id,
 			Permission::CreateProduct
 		));
 		assert!(RolePermissions::check_permission(
 			&user,
-			company_id,
+			business_id,
 			Permission::ViewProduct
 		));
 
 		// Check permission user doesn't have
 		assert!(!RolePermissions::check_permission(
 			&user,
-			company_id,
-			Permission::ManageCompany
+			business_id,
+			Permission::ManageBusiness
 		));
 	});
 }
 
 #[test]
-fn check_permission_fails_for_different_company() {
+fn check_permission_fails_for_different_business() {
 	new_test_ext().execute_with(|| {
 		let user = AccountId32::from([1u8; 32]);
-		let company_id_1 = 1u32;
-		let company_id_2 = 2u32;
+		let business_id_1 = 1u32;
+		let business_id_2 = 2u32;
 
-		// Assign role to user in company 1
+		// Assign role to user in business 1
 		assert_ok!(RolePermissions::assign_role(
 			RuntimeOrigin::root(),
 			user.clone(),
-			company_id_1,
+			business_id_1,
 			0 // Owner role
 		));
 
-		// Check permission in company 1 - should work
+		// Check permission in business 1 - should work
 		assert!(RolePermissions::check_permission(
 			&user,
-			company_id_1,
-			Permission::ManageCompany
+			business_id_1,
+			Permission::ManageBusiness
 		));
 
-		// Check permission in company 2 - should fail
+		// Check permission in business 2 - should fail
 		assert!(!RolePermissions::check_permission(
 			&user,
-			company_id_2,
-			Permission::ManageCompany
+			business_id_2,
+			Permission::ManageBusiness
 		));
 	});
 }
@@ -375,18 +375,18 @@ fn check_permission_fails_for_different_company() {
 fn get_user_permissions_works() {
 	new_test_ext().execute_with(|| {
 		let user = AccountId32::from([1u8; 32]);
-		let company_id = 1u32;
+		let business_id = 1u32;
 
 		// Assign supplier role to user
 		assert_ok!(RolePermissions::assign_role(
 			RuntimeOrigin::root(),
 			user.clone(),
-			company_id,
+			business_id,
 			4 // Supplier role
 		));
 
 		// Get permissions
-		let permissions = RolePermissions::get_user_permissions(&user, company_id).unwrap();
+		let permissions = RolePermissions::get_user_permissions(&user, business_id).unwrap();
 		assert_eq!(permissions.len(), 3);
 		assert!(permissions.contains(&Permission::CreateProduct));
 		assert!(permissions.contains(&Permission::ViewProduct));
@@ -413,49 +413,49 @@ fn is_system_role_works() {
 fn owner_role_has_all_permissions() {
 	new_test_ext().execute_with(|| {
 		let user = AccountId32::from([1u8; 32]);
-		let company_id = 1u32;
+		let business_id = 1u32;
 
 		// Assign owner role
 		assert_ok!(RolePermissions::assign_role(
 			RuntimeOrigin::root(),
 			user.clone(),
-			company_id,
+			business_id,
 			0 // Owner role
 		));
 
 		// Check all permissions
-		assert!(RolePermissions::check_permission(&user, company_id, Permission::CreateProduct));
-		assert!(RolePermissions::check_permission(&user, company_id, Permission::UpdateProduct));
-		assert!(RolePermissions::check_permission(&user, company_id, Permission::DeleteProduct));
-		assert!(RolePermissions::check_permission(&user, company_id, Permission::ViewProduct));
-		assert!(RolePermissions::check_permission(&user, company_id, Permission::ManageUsers));
-		assert!(RolePermissions::check_permission(&user, company_id, Permission::ManageRoles));
-		assert!(RolePermissions::check_permission(&user, company_id, Permission::ViewReports));
-		assert!(RolePermissions::check_permission(&user, company_id, Permission::CreateShipment));
-		assert!(RolePermissions::check_permission(&user, company_id, Permission::UpdateShipment));
-		assert!(RolePermissions::check_permission(&user, company_id, Permission::ManageCompany));
+		assert!(RolePermissions::check_permission(&user, business_id, Permission::CreateProduct));
+		assert!(RolePermissions::check_permission(&user, business_id, Permission::UpdateProduct));
+		assert!(RolePermissions::check_permission(&user, business_id, Permission::DeleteProduct));
+		assert!(RolePermissions::check_permission(&user, business_id, Permission::ViewProduct));
+		assert!(RolePermissions::check_permission(&user, business_id, Permission::ManageUsers));
+		assert!(RolePermissions::check_permission(&user, business_id, Permission::ManageRoles));
+		assert!(RolePermissions::check_permission(&user, business_id, Permission::ViewReports));
+		assert!(RolePermissions::check_permission(&user, business_id, Permission::CreateShipment));
+		assert!(RolePermissions::check_permission(&user, business_id, Permission::UpdateShipment));
+		assert!(RolePermissions::check_permission(&user, business_id, Permission::ManageBusiness));
 	});
 }
 
 #[test]
-fn manager_role_missing_manage_company() {
+fn manager_role_missing_manage_business() {
 	new_test_ext().execute_with(|| {
 		let user = AccountId32::from([1u8; 32]);
-		let company_id = 1u32;
+		let business_id = 1u32;
 
 		// Assign manager role
 		assert_ok!(RolePermissions::assign_role(
 			RuntimeOrigin::root(),
 			user.clone(),
-			company_id,
+			business_id,
 			1 // Manager role
 		));
 
 		// Check has most permissions
-		assert!(RolePermissions::check_permission(&user, company_id, Permission::CreateProduct));
-		assert!(RolePermissions::check_permission(&user, company_id, Permission::ManageUsers));
+		assert!(RolePermissions::check_permission(&user, business_id, Permission::CreateProduct));
+		assert!(RolePermissions::check_permission(&user, business_id, Permission::ManageUsers));
 
-		// Check doesn't have ManageCompany
-		assert!(!RolePermissions::check_permission(&user, company_id, Permission::ManageCompany));
+		// Check doesn't have ManageBusiness
+		assert!(!RolePermissions::check_permission(&user, business_id, Permission::ManageBusiness));
 	});
 }

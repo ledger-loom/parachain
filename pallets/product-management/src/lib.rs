@@ -84,7 +84,7 @@ pub mod pallet {
 	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	pub enum VisibilityLevel {
 		Public,
-		Company,
+		Business,
 		Management,
 		Restricted,
 		Private,
@@ -96,7 +96,7 @@ pub mod pallet {
 	pub struct Product<T: Config> {
 		// Public metadata (unencrypted)
 		pub product_id: u32,
-		pub company_id: u32,
+		pub business_id: u32,
 		pub status: ProductStatus,
 		pub category: BoundedVec<u8, T::MaxCategoryLength>,
 		pub created_at: BlockNumberFor<T>,
@@ -121,12 +121,12 @@ pub mod pallet {
 	#[pallet::getter(fn products)]
 	pub type Products<T: Config> = StorageMap<_, Blake2_128Concat, u32, Product<T>>;
 
-	/// Storage: Company products
+	/// Storage: Business products
 	#[pallet::storage]
-	#[pallet::getter(fn company_products)]
-	pub type CompanyProducts<T: Config> = StorageDoubleMap<
+	#[pallet::getter(fn business_products)]
+	pub type BusinessProducts<T: Config> = StorageDoubleMap<
 		_,
-		Blake2_128Concat, u32,  // company_id
+		Blake2_128Concat, u32,  // business_id
 		Blake2_128Concat, u32,  // product_id
 		(),
 	>;
@@ -144,8 +144,8 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		ProductCreated { product_id: u32, company_id: u32, name: Vec<u8> },
-		ProductCreatedEncrypted { product_id: u32, company_id: u32, data_hash: [u8; 32] },
+		ProductCreated { product_id: u32, business_id: u32, name: Vec<u8> },
+		ProductCreatedEncrypted { product_id: u32, business_id: u32, data_hash: [u8; 32] },
 		ProductUpdated { product_id: u32 },
 		ProductStatusChanged { product_id: u32, status: ProductStatus },
 		AttributeAdded { product_id: u32, key: Vec<u8> },
@@ -182,7 +182,7 @@ pub mod pallet {
 		#[pallet::weight(T::WeightInfo::create_product())]
 		pub fn create_product(
 			origin: OriginFor<T>,
-			company_id: u32,
+			business_id: u32,
 			name: Vec<u8>,
 			category: Vec<u8>,
 			attributes: Vec<(Vec<u8>, Vec<u8>)>,
@@ -214,7 +214,7 @@ pub mod pallet {
 			let product = Product {
 				name: bounded_name,
 				category: bounded_category.clone(),
-				company_id,
+				business_id,
 				status: ProductStatus::Active,
 				created_at: now,
 				updated_at: now,
@@ -222,7 +222,7 @@ pub mod pallet {
 			};
 
 			Products::<T>::insert(product_id, product);
-			CompanyProducts::<T>::insert(company_id, product_id, ());
+			BusinessProducts::<T>::insert(business_id, product_id, ());
 			NextProductId::<T>::put(product_id.saturating_add(1));
 
 			// Track category
@@ -230,7 +230,7 @@ pub mod pallet {
 				*count = Some(count.map_or(1, |c| c.saturating_add(1)));
 			});
 
-			Self::deposit_event(Event::ProductCreated { product_id, company_id, name });
+			Self::deposit_event(Event::ProductCreated { product_id, business_id, name });
 
 			Ok(())
 		}
@@ -336,7 +336,7 @@ pub mod pallet {
 		#[pallet::weight(10_000)]
 		pub fn create_encrypted_product(
 			origin: OriginFor<T>,
-			company_id: u32,
+			business_id: u32,
 			encrypted_name: Vec<u8>,
 			encrypted_attributes: Vec<u8>,
 			category: Vec<u8>,
@@ -367,7 +367,7 @@ pub mod pallet {
 
 			let product = Product {
 				product_id,
-				company_id,
+				business_id,
 				status: ProductStatus::Active,
 				category: bounded_category.clone(),
 				created_at: now,
@@ -382,7 +382,7 @@ pub mod pallet {
 			};
 
 			Products::<T>::insert(product_id, product);
-			CompanyProducts::<T>::insert(company_id, product_id, ());
+			BusinessProducts::<T>::insert(business_id, product_id, ());
 			NextProductId::<T>::put(product_id.saturating_add(1));
 
 			// Track category
@@ -392,7 +392,7 @@ pub mod pallet {
 
 			Self::deposit_event(Event::ProductCreatedEncrypted {
 				product_id,
-				company_id,
+				business_id,
 				data_hash,
 			});
 
@@ -406,14 +406,14 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			product_id: u32,
 			user_role: u32,
-			user_company_id: u32,
+			user_business_id: u32,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
 			let product = Products::<T>::get(product_id).ok_or(Error::<T>::ProductNotFound)?;
 
 			// Check access control
-			let has_access = Self::check_product_access(&product, user_role, user_company_id);
+			let has_access = Self::check_product_access(&product, user_role, user_business_id);
 			ensure!(has_access, Error::<T>::NotAuthorized);
 
 			Self::deposit_event(Event::ProductAccessGranted {
@@ -458,21 +458,21 @@ pub mod pallet {
 	}
 
 	impl<T: Config> Pallet<T> {
-		/// Check if user has access to product based on role and company
+		/// Check if user has access to product based on role and business
 		fn check_product_access(
 			product: &Product<T>,
 			user_role: u32,
-			user_company_id: u32,
+			user_business_id: u32,
 		) -> bool {
 			match product.visibility {
 				VisibilityLevel::Public => true,
-				VisibilityLevel::Company => user_company_id == product.company_id,
+				VisibilityLevel::Business => user_business_id == product.business_id,
 				VisibilityLevel::Management => {
 					// Role IDs: 1=Admin, 2=Manager (adjust based on your role-permissions pallet)
-					user_company_id == product.company_id && (user_role == 1 || user_role == 2)
+					user_business_id == product.business_id && (user_role == 1 || user_role == 2)
 				}
 				VisibilityLevel::Restricted => {
-					user_company_id == product.company_id
+					user_business_id == product.business_id
 						&& product.authorized_roles.contains(&user_role)
 				}
 				VisibilityLevel::Private => false,

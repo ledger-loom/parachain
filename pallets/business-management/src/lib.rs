@@ -63,7 +63,7 @@ pub mod pallet {
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
 
-	/// Business/Supply Business information
+	/// Business information
 	#[derive(CloneNoBound, Encode, Decode, Eq, PartialEqNoBound, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(T))]
 	pub struct Business<T: Config> {
@@ -117,10 +117,10 @@ pub mod pallet {
 		pub invited_at: BlockNumberFor<T>,
 	}
 
-	/// Storage: Businesss indexed by ID
+	/// Storage: Businesses indexed by ID
 	#[pallet::storage]
-	#[pallet::getter(fn businesss)]
-	pub type Businesss<T: Config> = StorageMap<_, Blake2_128Concat, u32, Business<T>>;
+	#[pallet::getter(fn businesses)]
+	pub type Businesses<T: Config> = StorageMap<_, Blake2_128Concat, u32, Business<T>>;
 
 	/// Storage: Business members
 	#[pallet::storage]
@@ -128,10 +128,10 @@ pub mod pallet {
 	pub type BusinessMembers<T: Config> =
 		StorageDoubleMap<_, Blake2_128Concat, u32, Blake2_128Concat, T::AccountId, MemberRole>;
 
-	/// Storage: User's businesss
+	/// Storage: User's businesses
 	#[pallet::storage]
-	#[pallet::getter(fn user_businesss)]
-	pub type UserBusinesss<T: Config> =
+	#[pallet::getter(fn user_businesses)]
+	pub type UserBusinesses<T: Config> =
 		StorageDoubleMap<_, Blake2_128Concat, T::AccountId, Blake2_128Concat, u32, ()>;
 
 	/// Storage: Invitations
@@ -252,13 +252,13 @@ pub mod pallet {
 			};
 
 			// Store business
-			Businesss::<T>::insert(business_id, business);
+			Businesses::<T>::insert(business_id, business);
 
 			// Add owner as member
 			BusinessMembers::<T>::insert(business_id, &who, MemberRole::Owner);
 
-			// Add to user's businesss
-			UserBusinesss::<T>::insert(&who, business_id, ());
+			// Add to user's businesses
+			UserBusinesses::<T>::insert(&who, business_id, ());
 
 			// Increment business count
 			BusinessCount::<T>::mutate(|count| *count = count.saturating_add(1));
@@ -293,7 +293,7 @@ pub mod pallet {
 				encrypted_config.try_into().map_err(|_| Error::<T>::ConfigDataTooLong)?;
 
 			// Update business config
-			Businesss::<T>::try_mutate(business_id, |maybe_business| -> DispatchResult {
+			Businesses::<T>::try_mutate(business_id, |maybe_business| -> DispatchResult {
 				let business = maybe_business.as_mut().ok_or(Error::<T>::BusinessNotFound)?;
 
 				// Ensure caller is the owner
@@ -323,7 +323,7 @@ pub mod pallet {
 			let who = ensure_signed(origin)?;
 
 			// Get business
-			let business = Businesss::<T>::get(business_id).ok_or(Error::<T>::BusinessNotFound)?;
+			let business = Businesses::<T>::get(business_id).ok_or(Error::<T>::BusinessNotFound)?;
 
 			// Ensure caller is owner or manager
 			let caller_role = BusinessMembers::<T>::get(business_id, &who)
@@ -388,11 +388,11 @@ pub mod pallet {
 			// Add member to business
 			BusinessMembers::<T>::insert(business_id, &who, invitation.role);
 
-			// Add to user's businesss
-			UserBusinesss::<T>::insert(&who, business_id, ());
+			// Add to user's businesses
+			UserBusinesses::<T>::insert(&who, business_id, ());
 
 			// Increment member count
-			Businesss::<T>::try_mutate(business_id, |maybe_business| -> DispatchResult {
+			Businesses::<T>::try_mutate(business_id, |maybe_business| -> DispatchResult {
 				let business = maybe_business.as_mut().ok_or(Error::<T>::BusinessNotFound)?;
 				business.member_count = business.member_count.saturating_add(1);
 				Ok(())
@@ -451,7 +451,7 @@ pub mod pallet {
 			let who = ensure_signed(origin)?;
 
 			// Get business
-			let business = Businesss::<T>::get(business_id).ok_or(Error::<T>::BusinessNotFound)?;
+			let business = Businesses::<T>::get(business_id).ok_or(Error::<T>::BusinessNotFound)?;
 
 			// Ensure caller is owner
 			ensure!(business.owner == who, Error::<T>::NotBusinessOwner);
@@ -467,10 +467,10 @@ pub mod pallet {
 
 			// Remove member
 			BusinessMembers::<T>::remove(business_id, &member);
-			UserBusinesss::<T>::remove(&member, business_id);
+			UserBusinesses::<T>::remove(&member, business_id);
 
 			// Decrement member count
-			Businesss::<T>::try_mutate(business_id, |maybe_business| -> DispatchResult {
+			Businesses::<T>::try_mutate(business_id, |maybe_business| -> DispatchResult {
 				let business = maybe_business.as_mut().ok_or(Error::<T>::BusinessNotFound)?;
 				business.member_count = business.member_count.saturating_sub(1);
 				Ok(())
@@ -500,7 +500,7 @@ pub mod pallet {
 			);
 
 			// Update business owner
-			Businesss::<T>::try_mutate(business_id, |maybe_business| -> DispatchResult {
+			Businesses::<T>::try_mutate(business_id, |maybe_business| -> DispatchResult {
 				let business = maybe_business.as_mut().ok_or(Error::<T>::BusinessNotFound)?;
 
 				// Ensure caller is current owner
@@ -533,7 +533,7 @@ pub mod pallet {
 			ensure_root(origin)?;
 
 			// Update verification status
-			Businesss::<T>::try_mutate(business_id, |maybe_business| -> DispatchResult {
+			Businesses::<T>::try_mutate(business_id, |maybe_business| -> DispatchResult {
 				let business = maybe_business.as_mut().ok_or(Error::<T>::BusinessNotFound)?;
 				business.is_verified = true;
 				Ok(())

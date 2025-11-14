@@ -651,12 +651,12 @@ impl pallet_user_management::Config for Runtime {
 	type MaxDocuments = ConstU32<10>;
 }
 
-// Company Management Pallet Configuration
-impl pallet_company_management::Config for Runtime {
+// Business Management Pallet Configuration
+impl pallet_business_management::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
-	type WeightInfo = pallet_company_management::weights::SubstrateWeight<Runtime>;
+	type WeightInfo = pallet_business_management::weights::SubstrateWeight<Runtime>;
 	type MaxMembers = ConstU32<100>;
-	type MaxCompanyNameLength = ConstU32<128>;
+	type MaxBusinessNameLength = ConstU32<128>;
 	type MaxPendingInvites = ConstU32<50>;
 }
 
@@ -743,7 +743,7 @@ construct_runtime!(
 
 		// Supply Chain Pallets
 		UserManagement: pallet_user_management,
-		CompanyManagement: pallet_company_management,
+		BusinessManagement: pallet_business_management,
 		ProductManagement: pallet_product_management,
 		SupplyChainTracking: pallet_supply_chain_tracking,
 		RolePermissions: pallet_role_permissions,
@@ -937,7 +937,7 @@ impl_runtime_apis! {
 
 			// Supply chain pallets benchmarks
 			list_benchmark!(list, extra, pallet_user_management, UserManagement);
-			list_benchmark!(list, extra, pallet_company_management, CompanyManagement);
+			list_benchmark!(list, extra, pallet_business_management, BusinessManagement);
 			list_benchmark!(list, extra, pallet_product_management, ProductManagement);
 			list_benchmark!(list, extra, pallet_supply_chain_tracking, SupplyChainTracking);
 			list_benchmark!(list, extra, pallet_role_permissions, RolePermissions);
@@ -975,7 +975,7 @@ impl_runtime_apis! {
 
 			// Supply chain pallets benchmarks
 			add_benchmark!(params, batches, pallet_user_management, UserManagement);
-			add_benchmark!(params, batches, pallet_company_management, CompanyManagement);
+			add_benchmark!(params, batches, pallet_business_management, BusinessManagement);
 			add_benchmark!(params, batches, pallet_product_management, ProductManagement);
 			add_benchmark!(params, batches, pallet_supply_chain_tracking, SupplyChainTracking);
 			add_benchmark!(params, batches, pallet_role_permissions, RolePermissions);

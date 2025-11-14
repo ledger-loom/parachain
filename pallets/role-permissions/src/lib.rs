@@ -12,14 +12,14 @@
 //!
 //! ## Dispatchable Functions
 //!
-//! - `create_role` - Create a new custom role for a company
-//! - `assign_role` - Assign a role to a user within a company
-//! - `revoke_role` - Revoke a user's role within a company
+//! - `create_role` - Create a new custom role for a business
+//! - `assign_role` - Assign a role to a user within a business
+//! - `revoke_role` - Revoke a user's role within a business
 //! - `update_role_permissions` - Update permissions for a role
 //!
 //! ## Helper Functions
 //!
-//! - `check_permission` - Check if a user has a specific permission in a company
+//! - `check_permission` - Check if a user has a specific permission in a business
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -85,8 +85,8 @@ pub mod pallet {
 		CreateShipment,
 		/// Update shipment status
 		UpdateShipment,
-		/// Manage company settings
-		ManageCompany,
+		/// Manage business settings
+		ManageBusiness,
 	}
 
 	/// Role information
@@ -99,8 +99,8 @@ pub mod pallet {
 		pub name: BoundedVec<u8, T::MaxRoleNameLength>,
 		/// List of permissions for this role
 		pub permissions: BoundedVec<Permission, T::MaxPermissions>,
-		/// Company this role belongs to (None for system roles)
-		pub company_id: Option<u32>,
+		/// Business this role belongs to (None for system roles)
+		pub business_id: Option<u32>,
 		/// Whether this is a system-defined role
 		pub is_system_role: bool,
 		/// Creation timestamp
@@ -115,8 +115,8 @@ pub mod pallet {
 		pub user: T::AccountId,
 		/// Assigned role ID
 		pub role_id: u32,
-		/// Company ID
-		pub company_id: u32,
+		/// Business ID
+		pub business_id: u32,
 		/// Assignment timestamp
 		pub assigned_at: BlockNumberFor<T>,
 	}
@@ -126,7 +126,7 @@ pub mod pallet {
 	#[pallet::getter(fn roles)]
 	pub type Roles<T: Config> = StorageMap<_, Blake2_128Concat, u32, Role<T>>;
 
-	/// Storage: User roles - maps (user, company_id) to role_id
+	/// Storage: User roles - maps (user, business_id) to role_id
 	#[pallet::storage]
 	#[pallet::getter(fn user_roles)]
 	pub type UserRoles<T: Config> = StorageDoubleMap<
@@ -134,17 +134,17 @@ pub mod pallet {
 		Blake2_128Concat,
 		T::AccountId,
 		Blake2_128Concat,
-		u32, // company_id
+		u32, // business_id
 		u32, // role_id
 	>;
 
-	/// Storage: Company roles - maps (company_id, role_id) to ()
+	/// Storage: Business roles - maps (business_id, role_id) to ()
 	#[pallet::storage]
-	#[pallet::getter(fn company_roles)]
-	pub type CompanyRoles<T: Config> = StorageDoubleMap<
+	#[pallet::getter(fn business_roles)]
+	pub type BusinessRoles<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
-		u32, // company_id
+		u32, // business_id
 		Blake2_128Concat,
 		u32, // role_id
 		(),
@@ -181,11 +181,11 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// Role created
-		RoleCreated { role_id: u32, company_id: Option<u32>, name: Vec<u8> },
+		RoleCreated { role_id: u32, business_id: Option<u32>, name: Vec<u8> },
 		/// Role assigned to user
-		RoleAssigned { user: T::AccountId, role_id: u32, company_id: u32 },
+		RoleAssigned { user: T::AccountId, role_id: u32, business_id: u32 },
 		/// Role revoked from user
-		RoleRevoked { user: T::AccountId, company_id: u32 },
+		RoleRevoked { user: T::AccountId, business_id: u32 },
 		/// Role permissions updated
 		PermissionsUpdated { role_id: u32 },
 	}
@@ -195,9 +195,9 @@ pub mod pallet {
 	pub enum Error<T> {
 		/// Role not found
 		RoleNotFound,
-		/// User already has a role in this company
+		/// User already has a role in this business
 		RoleAlreadyAssigned,
-		/// User has no role in this company
+		/// User has no role in this business
 		NoRoleAssigned,
 		/// Cannot modify system role
 		CannotModifySystemRole,
@@ -207,8 +207,8 @@ pub mod pallet {
 		TooManyPermissions,
 		/// Not authorized to perform this action
 		NotAuthorized,
-		/// Role does not belong to this company
-		RoleNotInCompany,
+		/// Role does not belong to this business
+		RoleNotInBusiness,
 		/// Numeric overflow
 		Overflow,
 	}
@@ -219,20 +219,20 @@ pub mod pallet {
 	/// Dispatchable functions
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// Create a new role for a company
+		/// Create a new role for a business
 		#[pallet::call_index(0)]
 		#[pallet::weight(T::WeightInfo::create_role())]
 		pub fn create_role(
 			origin: OriginFor<T>,
-			company_id: u32,
+			business_id: u32,
 			name: Vec<u8>,
 			permissions: Vec<Permission>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
-			// Check if user has permission to create roles in this company
+			// Check if user has permission to create roles in this business
 			ensure!(
-				Self::check_permission(&who, company_id, Permission::ManageRoles),
+				Self::check_permission(&who, business_id, Permission::ManageRoles),
 				Error::<T>::NotAuthorized
 			);
 
@@ -253,99 +253,99 @@ pub mod pallet {
 				role_id,
 				name: bounded_name,
 				permissions: bounded_permissions,
-				company_id: Some(company_id),
+				business_id: Some(business_id),
 				is_system_role: false,
 				created_at: now,
 			};
 
 			// Store role
 			Roles::<T>::insert(role_id, role);
-			CompanyRoles::<T>::insert(company_id, role_id, ());
+			BusinessRoles::<T>::insert(business_id, role_id, ());
 			NextRoleId::<T>::put(next_id);
 
 			// Emit event
 			Self::deposit_event(Event::RoleCreated {
 				role_id,
-				company_id: Some(company_id),
+				business_id: Some(business_id),
 				name,
 			});
 
 			Ok(())
 		}
 
-		/// Assign a role to a user within a company
+		/// Assign a role to a user within a business
 		#[pallet::call_index(1)]
 		#[pallet::weight(T::WeightInfo::assign_role())]
 		pub fn assign_role(
 			origin: OriginFor<T>,
 			user: T::AccountId,
-			company_id: u32,
+			business_id: u32,
 			role_id: u32,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
 			// Check if caller has permission to manage users
 			ensure!(
-				Self::check_permission(&who, company_id, Permission::ManageUsers),
+				Self::check_permission(&who, business_id, Permission::ManageUsers),
 				Error::<T>::NotAuthorized
 			);
 
 			// Verify role exists
 			let role = Roles::<T>::get(role_id).ok_or(Error::<T>::RoleNotFound)?;
 
-			// Verify role belongs to this company (or is a system role)
-			if let Some(role_company_id) = role.company_id {
-				ensure!(role_company_id == company_id, Error::<T>::RoleNotInCompany);
+			// Verify role belongs to this business (or is a system role)
+			if let Some(role_business_id) = role.business_id {
+				ensure!(role_business_id == business_id, Error::<T>::RoleNotInBusiness);
 			}
 
-			// Check if user already has a role in this company
+			// Check if user already has a role in this business
 			ensure!(
-				!UserRoles::<T>::contains_key(&user, company_id),
+				!UserRoles::<T>::contains_key(&user, business_id),
 				Error::<T>::RoleAlreadyAssigned
 			);
 
 			// Assign role
-			UserRoles::<T>::insert(&user, company_id, role_id);
+			UserRoles::<T>::insert(&user, business_id, role_id);
 
 			// Emit event
 			Self::deposit_event(Event::RoleAssigned {
 				user,
 				role_id,
-				company_id,
+				business_id,
 			});
 
 			Ok(())
 		}
 
-		/// Revoke a user's role within a company
+		/// Revoke a user's role within a business
 		#[pallet::call_index(2)]
 		#[pallet::weight(T::WeightInfo::revoke_role())]
 		pub fn revoke_role(
 			origin: OriginFor<T>,
 			user: T::AccountId,
-			company_id: u32,
+			business_id: u32,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
 			// Check if caller has permission to manage users
 			ensure!(
-				Self::check_permission(&who, company_id, Permission::ManageUsers),
+				Self::check_permission(&who, business_id, Permission::ManageUsers),
 				Error::<T>::NotAuthorized
 			);
 
-			// Verify user has a role in this company
+			// Verify user has a role in this business
 			ensure!(
-				UserRoles::<T>::contains_key(&user, company_id),
+				UserRoles::<T>::contains_key(&user, business_id),
 				Error::<T>::NoRoleAssigned
 			);
 
 			// Remove role assignment
-			UserRoles::<T>::remove(&user, company_id);
+			UserRoles::<T>::remove(&user, business_id);
 
 			// Emit event
 			Self::deposit_event(Event::RoleRevoked {
 				user,
-				company_id,
+				business_id,
 			});
 
 			Ok(())
@@ -367,10 +367,10 @@ pub mod pallet {
 			// Cannot modify system roles
 			ensure!(!role.is_system_role, Error::<T>::CannotModifySystemRole);
 
-			// If role belongs to a company, check permissions
-			if let Some(company_id) = role.company_id {
+			// If role belongs to a business, check permissions
+			if let Some(business_id) = role.business_id {
 				ensure!(
-					Self::check_permission(&who, company_id, Permission::ManageRoles),
+					Self::check_permission(&who, business_id, Permission::ManageRoles),
 					Error::<T>::NotAuthorized
 				);
 			}
@@ -395,14 +395,14 @@ pub mod pallet {
 
 	/// Helper functions
 	impl<T: Config> Pallet<T> {
-		/// Check if a user has a specific permission within a company
+		/// Check if a user has a specific permission within a business
 		pub fn check_permission(
 			user: &T::AccountId,
-			company_id: u32,
+			business_id: u32,
 			permission: Permission,
 		) -> bool {
-			// Get user's role in the company
-			if let Some(role_id) = UserRoles::<T>::get(user, company_id) {
+			// Get user's role in the business
+			if let Some(role_id) = UserRoles::<T>::get(user, business_id) {
 				// Get role details
 				if let Some(role) = Roles::<T>::get(role_id) {
 					// Check if role has the required permission
@@ -427,12 +427,12 @@ pub mod pallet {
 				Permission::ViewReports,
 				Permission::CreateShipment,
 				Permission::UpdateShipment,
-				Permission::ManageCompany,
+				Permission::ManageBusiness,
 			];
 			Self::create_system_role(role_id, b"Owner".to_vec(), owner_permissions);
 			role_id += 1;
 
-			// Role 2: Manager - most permissions except ManageCompany
+			// Role 2: Manager - most permissions except ManageBusiness
 			let manager_permissions = vec![
 				Permission::CreateProduct,
 				Permission::UpdateProduct,
@@ -491,7 +491,7 @@ pub mod pallet {
 				role_id,
 				name: bounded_name,
 				permissions: bounded_permissions,
-				company_id: None,
+				business_id: None,
 				is_system_role: true,
 				created_at: BlockNumberFor::<T>::default(),
 			};
@@ -500,12 +500,12 @@ pub mod pallet {
 			SystemRoles::<T>::insert(role_id, ());
 		}
 
-		/// Get all permissions for a user in a company
+		/// Get all permissions for a user in a business
 		pub fn get_user_permissions(
 			user: &T::AccountId,
-			company_id: u32,
+			business_id: u32,
 		) -> Option<Vec<Permission>> {
-			if let Some(role_id) = UserRoles::<T>::get(user, company_id) {
+			if let Some(role_id) = UserRoles::<T>::get(user, business_id) {
 				if let Some(role) = Roles::<T>::get(role_id) {
 					return Some(role.permissions.to_vec());
 				}

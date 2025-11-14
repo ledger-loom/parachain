@@ -12,7 +12,7 @@ fn create_item_works() {
 		System::set_block_number(1);
 		let creator = AccountId32::from([1u8; 32]);
 		let item_id = [1u8; 32];
-		let chain_id = 1u32;
+		let business_id = 1u32;
 		let status = b"Created".to_vec();
 		let location = Some(b"Factory A, Beijing".to_vec());
 		let encrypted_data = b"encrypted_initial_data".to_vec();
@@ -21,7 +21,7 @@ fn create_item_works() {
 		assert_ok!(SupplyChainTracking::create_item(
 			RuntimeOrigin::signed(creator.clone()),
 			item_id,
-			chain_id,
+			business_id,
 			status.clone(),
 			location.clone(),
 			encrypted_data.clone()
@@ -30,7 +30,7 @@ fn create_item_works() {
 		// Verify item metadata exists
 		assert!(crate::Items::<Test>::contains_key(&item_id));
 		let metadata = crate::Items::<Test>::get(&item_id).unwrap();
-		assert_eq!(metadata.chain_id, chain_id);
+		assert_eq!(metadata.business_id, business_id);
 		assert_eq!(metadata.record_count, 1);
 		assert_eq!(metadata.creator, creator);
 
@@ -38,7 +38,7 @@ fn create_item_works() {
 		assert!(crate::ItemRecords::<Test>::contains_key(&item_id, 0));
 		let record = crate::ItemRecords::<Test>::get(&item_id, 0).unwrap();
 		assert_eq!(record.item_id, item_id);
-		assert_eq!(record.chain_id, chain_id);
+		assert_eq!(record.business_id, business_id);
 		assert_eq!(record.sequence, 0);
 		assert_eq!(record.status.to_vec(), status);
 		assert_eq!(record.location.as_ref().map(|l| l.to_vec()), location);
@@ -46,13 +46,13 @@ fn create_item_works() {
 		assert_eq!(record.previous_hash, [0u8; 32]); // Genesis record has zero hash
 
 		// Verify chain items mapping
-		assert!(crate::ChainItems::<Test>::contains_key(chain_id, &item_id));
+		assert!(crate::BusinessItems::<Test>::contains_key(business_id, &item_id));
 
 		// Verify event
 		System::assert_last_event(
 			Event::ItemCreated {
 				item_id,
-				chain_id,
+				business_id,
 				creator,
 			}
 			.into(),
@@ -65,13 +65,13 @@ fn create_item_fails_if_already_exists() {
 	new_test_ext().execute_with(|| {
 		let creator = AccountId32::from([1u8; 32]);
 		let item_id = [1u8; 32];
-		let chain_id = 1u32;
+		let business_id = 1u32;
 
 		// Create item
 		assert_ok!(SupplyChainTracking::create_item(
 			RuntimeOrigin::signed(creator.clone()),
 			item_id,
-			chain_id,
+			business_id,
 			b"Created".to_vec(),
 			None,
 			b"data".to_vec()
@@ -82,7 +82,7 @@ fn create_item_fails_if_already_exists() {
 			SupplyChainTracking::create_item(
 				RuntimeOrigin::signed(creator),
 				item_id,
-				chain_id,
+				business_id,
 				b"Created".to_vec(),
 				None,
 				b"data".to_vec()
@@ -162,13 +162,13 @@ fn append_record_works() {
 		let creator = AccountId32::from([1u8; 32]);
 		let recorder = AccountId32::from([2u8; 32]);
 		let item_id = [1u8; 32];
-		let chain_id = 1u32;
+		let business_id = 1u32;
 
 		// Create item
 		assert_ok!(SupplyChainTracking::create_item(
 			RuntimeOrigin::signed(creator.clone()),
 			item_id,
-			chain_id,
+			business_id,
 			b"Created".to_vec(),
 			Some(b"Factory A".to_vec()),
 			b"initial_data".to_vec()
@@ -238,13 +238,13 @@ fn query_item_history_works() {
 		System::set_block_number(1);
 		let creator = AccountId32::from([1u8; 32]);
 		let item_id = [1u8; 32];
-		let chain_id = 1u32;
+		let business_id = 1u32;
 
 		// Create item
 		assert_ok!(SupplyChainTracking::create_item(
 			RuntimeOrigin::signed(creator.clone()),
 			item_id,
-			chain_id,
+			business_id,
 			b"Created".to_vec(),
 			None,
 			b"data0".to_vec()
@@ -283,13 +283,13 @@ fn verify_item_chain_works_for_valid_chain() {
 		System::set_block_number(1);
 		let creator = AccountId32::from([1u8; 32]);
 		let item_id = [1u8; 32];
-		let chain_id = 1u32;
+		let business_id = 1u32;
 
 		// Create item with multiple records
 		assert_ok!(SupplyChainTracking::create_item(
 			RuntimeOrigin::signed(creator.clone()),
 			item_id,
-			chain_id,
+			business_id,
 			b"Created".to_vec(),
 			None,
 			b"data0".to_vec()
@@ -332,13 +332,13 @@ fn complete_item_lifecycle() {
 		let shipper = AccountId32::from([3u8; 32]);
 		let warehouse = AccountId32::from([4u8; 32]);
 		let item_id = [1u8; 32];
-		let chain_id = 1u32;
+		let business_id = 1u32;
 
 		// Step 1: Item created at factory
 		assert_ok!(SupplyChainTracking::create_item(
 			RuntimeOrigin::signed(manufacturer.clone()),
 			item_id,
-			chain_id,
+			business_id,
 			b"Raw Material".to_vec(),
 			Some(b"Factory A, Beijing".to_vec()),
 			b"encrypted_raw_material_data".to_vec()
@@ -425,13 +425,13 @@ fn get_item_history_helper_works() {
 		System::set_block_number(1);
 		let creator = AccountId32::from([1u8; 32]);
 		let item_id = [1u8; 32];
-		let chain_id = 1u32;
+		let business_id = 1u32;
 
 		// Create item
 		assert_ok!(SupplyChainTracking::create_item(
 			RuntimeOrigin::signed(creator.clone()),
 			item_id,
-			chain_id,
+			business_id,
 			b"Created".to_vec(),
 			None,
 			b"data".to_vec()
@@ -466,7 +466,7 @@ fn hash_computation_is_deterministic() {
 		System::set_block_number(1);
 		let creator = AccountId32::from([1u8; 32]);
 		let item_id = [1u8; 32];
-		let chain_id = 1u32;
+		let business_id = 1u32;
 
 		// Create two identical items with different IDs
 		let item_id_2 = [2u8; 32];
@@ -474,7 +474,7 @@ fn hash_computation_is_deterministic() {
 		assert_ok!(SupplyChainTracking::create_item(
 			RuntimeOrigin::signed(creator.clone()),
 			item_id,
-			chain_id,
+			business_id,
 			b"Created".to_vec(),
 			None,
 			b"same_data".to_vec()
@@ -487,7 +487,7 @@ fn hash_computation_is_deterministic() {
 		assert_ok!(SupplyChainTracking::create_item(
 			RuntimeOrigin::signed(creator.clone()),
 			item_id_2,
-			chain_id,
+			business_id,
 			b"Created".to_vec(),
 			None,
 			b"same_data".to_vec()
@@ -508,14 +508,14 @@ fn multiple_chains_work_independently() {
 		let creator2 = AccountId32::from([2u8; 32]);
 		let item_id_1 = [1u8; 32];
 		let item_id_2 = [2u8; 32];
-		let chain_id_1 = 1u32;
-		let chain_id_2 = 2u32;
+		let business_id_1 = 1u32;
+		let business_id_2 = 2u32;
 
 		// Create items for different chains
 		assert_ok!(SupplyChainTracking::create_item(
 			RuntimeOrigin::signed(creator1.clone()),
 			item_id_1,
-			chain_id_1,
+			business_id_1,
 			b"Created".to_vec(),
 			None,
 			b"data1".to_vec()
@@ -524,17 +524,17 @@ fn multiple_chains_work_independently() {
 		assert_ok!(SupplyChainTracking::create_item(
 			RuntimeOrigin::signed(creator2.clone()),
 			item_id_2,
-			chain_id_2,
+			business_id_2,
 			b"Created".to_vec(),
 			None,
 			b"data2".to_vec()
 		));
 
 		// Verify chain separation
-		assert!(crate::ChainItems::<Test>::contains_key(chain_id_1, &item_id_1));
-		assert!(!crate::ChainItems::<Test>::contains_key(chain_id_1, &item_id_2));
+		assert!(crate::BusinessItems::<Test>::contains_key(business_id_1, &item_id_1));
+		assert!(!crate::BusinessItems::<Test>::contains_key(business_id_1, &item_id_2));
 
-		assert!(crate::ChainItems::<Test>::contains_key(chain_id_2, &item_id_2));
-		assert!(!crate::ChainItems::<Test>::contains_key(chain_id_2, &item_id_1));
+		assert!(crate::BusinessItems::<Test>::contains_key(business_id_2, &item_id_2));
+		assert!(!crate::BusinessItems::<Test>::contains_key(business_id_2, &item_id_1));
 	});
 }

@@ -77,7 +77,7 @@ pub mod pallet {
 		/// Unique item ID (derived from chain wallet + item index)
 		pub item_id: [u8; 32],
 		/// Chain ID this item belongs to
-		pub chain_id: u32,
+		pub business_id: u32,
 		/// Record sequence number (0, 1, 2, ...)
 		pub sequence: u32,
 		/// Status string (encrypted or plain depending on chain config)
@@ -103,7 +103,7 @@ pub mod pallet {
 		/// Item ID
 		pub item_id: [u8; 32],
 		/// Chain ID
-		pub chain_id: u32,
+		pub business_id: u32,
 		/// Total number of records
 		pub record_count: u32,
 		/// First record timestamp
@@ -135,9 +135,9 @@ pub mod pallet {
 	/// Storage: Items by chain (for querying all items in a chain)
 	#[pallet::storage]
 	#[pallet::getter(fn chain_items)]
-	pub type ChainItems<T: Config> = StorageDoubleMap<
+	pub type BusinessItems<T: Config> = StorageDoubleMap<
 		_,
-		Blake2_128Concat, u32,       // chain_id
+		Blake2_128Concat, u32,       // business_id
 		Blake2_128Concat, [u8; 32],  // item_id
 		(),
 	>;
@@ -158,7 +158,7 @@ pub mod pallet {
 		/// Item tracking initiated (first record)
 		ItemCreated {
 			item_id: [u8; 32],
-			chain_id: u32,
+			business_id: u32,
 			creator: T::AccountId,
 		},
 		/// New tracking record appended
@@ -210,7 +210,7 @@ pub mod pallet {
 		///
 		/// Parameters:
 		/// - item_id: Unique item identifier (derived off-chain)
-		/// - chain_id: Chain this item belongs to
+		/// - business_id: Chain this item belongs to
 		/// - status: Initial status (e.g., "Created", "Manufactured")
 		/// - location: Optional initial location
 		/// - encrypted_data: Encrypted payload with custom fields
@@ -219,7 +219,7 @@ pub mod pallet {
 		pub fn create_item(
 			origin: OriginFor<T>,
 			item_id: [u8; 32],
-			chain_id: u32,
+			business_id: u32,
 			status: Vec<u8>,
 			location: Option<Vec<u8>>,
 			encrypted_data: Vec<u8>,
@@ -253,7 +253,7 @@ pub mod pallet {
 			// Create first record
 			let record = ItemRecord {
 				item_id,
-				chain_id,
+				business_id,
 				sequence: 0,
 				status: bounded_status,
 				location: bounded_location.clone(),
@@ -275,7 +275,7 @@ pub mod pallet {
 			// Create metadata
 			let metadata = ItemMetadata {
 				item_id,
-				chain_id,
+				business_id,
 				record_count: 1,
 				created_at: now,
 				last_updated: now,
@@ -286,7 +286,7 @@ pub mod pallet {
 			ItemMetadata_::<T>::insert(&item_id, metadata);
 
 			// Index by chain
-			ChainItems::<T>::insert(chain_id, &item_id, ());
+			BusinessItems::<T>::insert(business_id, &item_id, ());
 
 			// Index by location if provided
 			if let Some(loc) = bounded_location {
@@ -297,7 +297,7 @@ pub mod pallet {
 			// Emit event
 			Self::deposit_event(Event::ItemCreated {
 				item_id,
-				chain_id,
+				business_id,
 				creator: who,
 			});
 
@@ -351,7 +351,7 @@ pub mod pallet {
 			// Create new record
 			let record = ItemRecord {
 				item_id,
-				chain_id: metadata.chain_id,
+				business_id: metadata.business_id,
 				sequence,
 				status: bounded_status,
 				location: bounded_location.clone(),
@@ -480,7 +480,7 @@ pub mod pallet {
 			// Encode record without record_hash
 			let mut data = Vec::new();
 			record.item_id.encode_to(&mut data);
-			record.chain_id.encode_to(&mut data);
+			record.business_id.encode_to(&mut data);
 			record.sequence.encode_to(&mut data);
 			record.status.encode_to(&mut data);
 			record.location.encode_to(&mut data);
@@ -515,8 +515,8 @@ pub mod pallet {
 		}
 
 		/// Get items by chain ID (helper function)
-		pub fn get_chain_items(chain_id: u32) -> Vec<[u8; 32]> {
-			ChainItems::<T>::iter_prefix(chain_id)
+		pub fn get_chain_items(business_id: u32) -> Vec<[u8; 32]> {
+			BusinessItems::<T>::iter_prefix(business_id)
 				.map(|(item_id, _)| item_id)
 				.collect()
 		}

@@ -10,7 +10,7 @@ type ProductManagement = crate::Pallet<Test>;
 fn create_product_works() {
 	new_test_ext().execute_with(|| {
 		let user = AccountId32::from([1u8; 32]);
-		let company_id = 1u32;
+		let business_id = 1u32;
 		let name = b"Test Product".to_vec();
 		let category = b"Electronics".to_vec();
 		let attributes = vec![
@@ -21,7 +21,7 @@ fn create_product_works() {
 		// Create product
 		assert_ok!(ProductManagement::create_product(
 			RuntimeOrigin::signed(user.clone()),
-			company_id,
+			business_id,
 			name.clone(),
 			category.clone(),
 			attributes.clone()
@@ -35,12 +35,12 @@ fn create_product_works() {
 		let product = crate::Products::<Test>::get(product_id).unwrap();
 		assert_eq!(product.name.to_vec(), name);
 		assert_eq!(product.category.to_vec(), category);
-		assert_eq!(product.company_id, company_id);
+		assert_eq!(product.business_id, business_id);
 		assert_eq!(product.status, ProductStatus::Active);
 		assert_eq!(product.attributes.len(), 2);
 
-		// Verify company products mapping
-		assert!(crate::CompanyProducts::<Test>::contains_key(company_id, product_id));
+		// Verify business products mapping
+		assert!(crate::BusinessProducts::<Test>::contains_key(business_id, product_id));
 
 		// Verify next product ID
 		assert_eq!(crate::NextProductId::<Test>::get(), 1);
@@ -53,7 +53,7 @@ fn create_product_works() {
 		System::assert_last_event(
 			Event::ProductCreated {
 				product_id,
-				company_id,
+				business_id,
 				name,
 			}
 			.into(),
@@ -65,14 +65,14 @@ fn create_product_works() {
 fn create_product_fails_with_long_name() {
 	new_test_ext().execute_with(|| {
 		let user = AccountId32::from([1u8; 32]);
-		let company_id = 1u32;
+		let business_id = 1u32;
 		let name = vec![0u8; 300]; // Exceeds MaxProductNameLength (256)
 		let category = b"Electronics".to_vec();
 
 		assert_noop!(
 			ProductManagement::create_product(
 				RuntimeOrigin::signed(user),
-				company_id,
+				business_id,
 				name,
 				category,
 				vec![]
@@ -86,14 +86,14 @@ fn create_product_fails_with_long_name() {
 fn update_product_status_works() {
 	new_test_ext().execute_with(|| {
 		let user = AccountId32::from([1u8; 32]);
-		let company_id = 1u32;
+		let business_id = 1u32;
 		let name = b"Test Product".to_vec();
 		let category = b"Electronics".to_vec();
 
 		// Create product
 		assert_ok!(ProductManagement::create_product(
 			RuntimeOrigin::signed(user.clone()),
-			company_id,
+			business_id,
 			name,
 			category,
 			vec![]
@@ -144,14 +144,14 @@ fn update_product_status_fails_for_nonexistent_product() {
 fn add_attribute_works() {
 	new_test_ext().execute_with(|| {
 		let user = AccountId32::from([1u8; 32]);
-		let company_id = 1u32;
+		let business_id = 1u32;
 		let name = b"Test Product".to_vec();
 		let category = b"Electronics".to_vec();
 
 		// Create product
 		assert_ok!(ProductManagement::create_product(
 			RuntimeOrigin::signed(user.clone()),
-			company_id,
+			business_id,
 			name,
 			category,
 			vec![]
@@ -190,7 +190,7 @@ fn add_attribute_works() {
 fn add_attribute_fails_for_duplicate_key() {
 	new_test_ext().execute_with(|| {
 		let user = AccountId32::from([1u8; 32]);
-		let company_id = 1u32;
+		let business_id = 1u32;
 		let name = b"Test Product".to_vec();
 		let category = b"Electronics".to_vec();
 		let key = b"color".to_vec();
@@ -198,7 +198,7 @@ fn add_attribute_fails_for_duplicate_key() {
 		// Create product with initial attribute
 		assert_ok!(ProductManagement::create_product(
 			RuntimeOrigin::signed(user.clone()),
-			company_id,
+			business_id,
 			name,
 			category,
 			vec![(key.clone(), b"blue".to_vec())]
@@ -241,7 +241,7 @@ fn add_attribute_fails_for_nonexistent_product() {
 fn update_attribute_works() {
 	new_test_ext().execute_with(|| {
 		let user = AccountId32::from([1u8; 32]);
-		let company_id = 1u32;
+		let business_id = 1u32;
 		let name = b"Test Product".to_vec();
 		let category = b"Electronics".to_vec();
 		let key = b"color".to_vec();
@@ -249,7 +249,7 @@ fn update_attribute_works() {
 		// Create product with initial attribute
 		assert_ok!(ProductManagement::create_product(
 			RuntimeOrigin::signed(user.clone()),
-			company_id,
+			business_id,
 			name,
 			category,
 			vec![(key.clone(), b"blue".to_vec())]
@@ -285,14 +285,14 @@ fn update_attribute_works() {
 fn update_attribute_fails_for_nonexistent_attribute() {
 	new_test_ext().execute_with(|| {
 		let user = AccountId32::from([1u8; 32]);
-		let company_id = 1u32;
+		let business_id = 1u32;
 		let name = b"Test Product".to_vec();
 		let category = b"Electronics".to_vec();
 
 		// Create product without attributes
 		assert_ok!(ProductManagement::create_product(
 			RuntimeOrigin::signed(user.clone()),
-			company_id,
+			business_id,
 			name,
 			category,
 			vec![]

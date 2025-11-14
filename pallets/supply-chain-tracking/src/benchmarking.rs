@@ -17,14 +17,14 @@ mod benchmarks {
 	fn create_tracking() {
 		let caller: T::AccountId = whitelisted_caller();
 		let product_id = 1u32;
-		let company_id = 1u32;
+		let business_id = 1u32;
 		let location = vec![0u8; 100];
 
 		#[extrinsic_call]
 		create_tracking(
 			RawOrigin::Signed(caller.clone()),
 			product_id,
-			company_id,
+			business_id,
 			location,
 		);
 
@@ -35,14 +35,14 @@ mod benchmarks {
 	fn add_event() {
 		let caller: T::AccountId = whitelisted_caller();
 		let product_id = 1u32;
-		let company_id = 1u32;
+		let business_id = 1u32;
 		let initial_location = vec![0u8; 100];
 
 		// Setup: create tracking first
 		let _ = SupplyChainTracking::<T>::create_tracking(
 			RawOrigin::Signed(caller.clone()).into(),
 			product_id,
-			company_id,
+			business_id,
 			initial_location,
 		);
 
@@ -66,14 +66,14 @@ mod benchmarks {
 	fn update_status() {
 		let caller: T::AccountId = whitelisted_caller();
 		let product_id = 1u32;
-		let company_id = 1u32;
+		let business_id = 1u32;
 		let location = vec![0u8; 100];
 
 		// Setup: create tracking first
 		let _ = SupplyChainTracking::<T>::create_tracking(
 			RawOrigin::Signed(caller.clone()).into(),
 			product_id,
-			company_id,
+			business_id,
 			location,
 		);
 
@@ -92,14 +92,14 @@ mod benchmarks {
 	fn update_location() {
 		let caller: T::AccountId = whitelisted_caller();
 		let product_id = 1u32;
-		let company_id = 1u32;
+		let business_id = 1u32;
 		let initial_location = vec![0u8; 100];
 
 		// Setup: create tracking first
 		let _ = SupplyChainTracking::<T>::create_tracking(
 			RawOrigin::Signed(caller.clone()).into(),
 			product_id,
-			company_id,
+			business_id,
 			initial_location,
 		);
 

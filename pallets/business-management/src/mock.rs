@@ -1,6 +1,6 @@
-//! Mock runtime for testing company management pallet
+//! Mock runtime for testing business management pallet
 
-use crate as pallet_company_management;
+use crate as pallet_business_management;
 use frame::deps::sp_runtime::BuildStorage;
 use frame::prelude::*;
 use frame::testing_prelude::*;
@@ -10,7 +10,7 @@ type Block = frame_system::mocking::MockBlock<Test>;
 frame_support::construct_runtime!(
 	pub enum Test {
 		System: frame_system,
-		CompanyManagement: pallet_company_management,
+		BusinessManagement: pallet_business_management,
 	}
 );
 
@@ -20,15 +20,15 @@ impl frame_system::Config for Test {
 }
 
 parameter_types! {
-	pub const MaxCompanyNameLength: u32 = 256;
+	pub const MaxBusinessNameLength: u32 = 256;
 	pub const MaxMembers: u32 = 100;
 	pub const MaxPendingInvites: u32 = 50;
 }
 
-impl pallet_company_management::Config for Test {
+impl pallet_business_management::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type WeightInfo = ();
-	type MaxCompanyNameLength = MaxCompanyNameLength;
+	type MaxBusinessNameLength = MaxBusinessNameLength;
 	type MaxMembers = MaxMembers;
 	type MaxPendingInvites = MaxPendingInvites;
 }

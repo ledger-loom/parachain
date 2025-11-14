@@ -16,7 +16,7 @@ mod benchmarks {
 	#[benchmark]
 	fn create_product() {
 		let caller: T::AccountId = whitelisted_caller();
-		let company_id = 1u32;
+		let business_id = 1u32;
 		let name = vec![0u8; 100];
 		let category = vec![0u8; 50];
 		let attributes = vec![
@@ -27,7 +27,7 @@ mod benchmarks {
 		#[extrinsic_call]
 		create_product(
 			RawOrigin::Signed(caller.clone()),
-			company_id,
+			business_id,
 			name,
 			category,
 			attributes,
@@ -39,14 +39,14 @@ mod benchmarks {
 	#[benchmark]
 	fn update_product_status() {
 		let caller: T::AccountId = whitelisted_caller();
-		let company_id = 1u32;
+		let business_id = 1u32;
 		let name = vec![0u8; 100];
 		let category = vec![0u8; 50];
 
 		// Setup: create product first
 		let _ = ProductManagement::<T>::create_product(
 			RawOrigin::Signed(caller.clone()).into(),
-			company_id,
+			business_id,
 			name,
 			category,
 			vec![],
@@ -65,14 +65,14 @@ mod benchmarks {
 	#[benchmark]
 	fn add_attribute() {
 		let caller: T::AccountId = whitelisted_caller();
-		let company_id = 1u32;
+		let business_id = 1u32;
 		let name = vec![0u8; 100];
 		let category = vec![0u8; 50];
 
 		// Setup: create product first
 		let _ = ProductManagement::<T>::create_product(
 			RawOrigin::Signed(caller.clone()).into(),
-			company_id,
+			business_id,
 			name,
 			category,
 			vec![],
@@ -89,7 +89,7 @@ mod benchmarks {
 	#[benchmark]
 	fn update_attribute() {
 		let caller: T::AccountId = whitelisted_caller();
-		let company_id = 1u32;
+		let business_id = 1u32;
 		let name = vec![0u8; 100];
 		let category = vec![0u8; 50];
 		let key = vec![0u8; 20];
@@ -98,7 +98,7 @@ mod benchmarks {
 		// Setup: create product with an attribute
 		let _ = ProductManagement::<T>::create_product(
 			RawOrigin::Signed(caller.clone()).into(),
-			company_id,
+			business_id,
 			name,
 			category,
 			vec![(key.clone(), initial_value)],
