@@ -8547,6 +8547,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-business-management"
+version = "0.1.0"
+dependencies = [
+ "parity-scale-codec",
+ "polkadot-sdk-frame",
+ "scale-info",
+ "serde",
+]
+
+[[package]]
 name = "pallet-child-bounties"
 version = "39.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8616,16 +8626,6 @@ dependencies = [
  "scale-info",
  "sp-core 36.1.0",
  "sp-runtime",
-]
-
-[[package]]
-name = "pallet-company-management"
-version = "0.1.0"
-dependencies = [
- "parity-scale-codec",
- "polkadot-sdk-frame",
- "scale-info",
- "serde",
 ]
 
 [[package]]
@@ -17894,7 +17894,7 @@ dependencies = [
  "cumulus-pallet-parachain-system",
  "hex-literal",
  "log",
- "pallet-company-management",
+ "pallet-business-management",
  "pallet-external-integrations",
  "pallet-product-management",
  "pallet-role-permissions",

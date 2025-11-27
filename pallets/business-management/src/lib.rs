@@ -5,22 +5,19 @@
 //! ## Overview
 //!
 //! This pallet provides functionality for:
-//! - Creating and managing businesses with hierarchical wallet derivation
+//! - Creating and managing businesses
 //! - Inviting team members via email/wallet
-//! - Business settings and configuration (encrypted on-business)
+//! - Business settings and configuration (encrypted on-chain)
 //! - Ownership transfer between users
 //! - Business verification and status management
 //!
-//! ## Hierarchical Wallet Derivation
+//! ## Encryption Model
 //!
-//! Each business has a derived wallet from the user's wallet:
-//! - User wallet: m/44'/354'/user_index'
-//! - Business wallet: user_wallet/0/business_id'
+//! Businesses support dual encryption types:
+//! - **ProjectKey**: Data encrypted by core platform with master key (for email users)
+//! - **WalletKey**: Data encrypted client-side with user's wallet key (for wallet users)
 //!
-//! This enables:
-//! - Business-specific encryption keys
-//! - Separate key management per business
-//! - Secure multi-business support
+//! All business data is stored in the core database and selectively synced to blockchain for immutability.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -63,7 +60,17 @@ pub mod pallet {
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
 
-	/// Business information
+	/// Encryption type for business data
+	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	pub enum EncryptionType {
+		/// Encrypted by core platform with project master key (for email users)
+		ProjectKey,
+		/// Encrypted client-side with user's wallet key (for wallet users)
+		WalletKey,
+	}
+
+	/// Business information (minimal on-chain footprint)
+	/// Full business data stored in core database
 	#[derive(CloneNoBound, Encode, Decode, Eq, PartialEqNoBound, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(T))]
 	pub struct Business<T: Config> {
@@ -71,12 +78,10 @@ pub mod pallet {
 		pub name: BoundedVec<u8, T::MaxBusinessNameLength>,
 		/// Business owner (user account)
 		pub owner: T::AccountId,
-		/// Owner's user index (for wallet derivation)
-		pub owner_user_index: u32,
-		/// Business ID (used for derivation path)
-		pub business_id: u32,
-		/// Derived public key for this business (32 bytes)
-		pub derived_public_key: [u8; 32],
+		/// Business UUID (reference to core database - 16 bytes)
+		pub business_uuid: [u8; 16],
+		/// Encryption type for this business's data
+		pub encryption_type: EncryptionType,
 		/// Creation timestamp
 		pub created_at: BlockNumberFor<T>,
 		/// Verification status
@@ -110,69 +115,63 @@ pub mod pallet {
 	#[derive(CloneNoBound, Encode, Decode, Eq, PartialEqNoBound, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(T))]
 	pub struct Invitation<T: Config> {
-		pub business_id: u32,
+		pub business_uuid: [u8; 16],
 		pub invitee: T::AccountId,
 		pub role: MemberRole,
 		pub status: InviteStatus,
 		pub invited_at: BlockNumberFor<T>,
 	}
 
-	/// Storage: Businesses indexed by ID
+	/// Storage: Businesses indexed by UUID
 	#[pallet::storage]
 	#[pallet::getter(fn businesses)]
-	pub type Businesses<T: Config> = StorageMap<_, Blake2_128Concat, u32, Business<T>>;
+	pub type Businesses<T: Config> = StorageMap<_, Blake2_128Concat, [u8; 16], Business<T>>;
 
-	/// Storage: Business members
+	/// Storage: Business members (indexed by UUID)
 	#[pallet::storage]
 	#[pallet::getter(fn business_members)]
 	pub type BusinessMembers<T: Config> =
-		StorageDoubleMap<_, Blake2_128Concat, u32, Blake2_128Concat, T::AccountId, MemberRole>;
+		StorageDoubleMap<_, Blake2_128Concat, [u8; 16], Blake2_128Concat, T::AccountId, MemberRole>;
 
-	/// Storage: User's businesses
+	/// Storage: User's businesses (indexed by UUID)
 	#[pallet::storage]
 	#[pallet::getter(fn user_businesses)]
 	pub type UserBusinesses<T: Config> =
-		StorageDoubleMap<_, Blake2_128Concat, T::AccountId, Blake2_128Concat, u32, ()>;
+		StorageDoubleMap<_, Blake2_128Concat, T::AccountId, Blake2_128Concat, [u8; 16], ()>;
 
-	/// Storage: Invitations
+	/// Storage: Invitations (indexed by UUID)
 	#[pallet::storage]
 	#[pallet::getter(fn invitations)]
 	pub type Invitations<T: Config> =
-		StorageDoubleMap<_, Blake2_128Concat, u32, Blake2_128Concat, T::AccountId, Invitation<T>>;
-
-	/// Storage: Total business count
-	#[pallet::storage]
-	#[pallet::getter(fn business_count)]
-	pub type BusinessCount<T> = StorageValue<_, u32, ValueQuery>;
+		StorageDoubleMap<_, Blake2_128Concat, [u8; 16], Blake2_128Concat, T::AccountId, Invitation<T>>;
 
 	/// Events for the pallet
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// Business created with derived wallet
+		/// Business synced from core database to blockchain
 		BusinessCreated {
-			business_id: u32,
+			business_uuid: [u8; 16],
 			owner: T::AccountId,
-			owner_user_index: u32,
-			derived_public_key: [u8; 32],
+			encryption_type: EncryptionType,
 			name: Vec<u8>,
 		},
 		/// Member invited to business
-		MemberInvited { business_id: u32, invitee: T::AccountId, role: MemberRole },
+		MemberInvited { business_uuid: [u8; 16], invitee: T::AccountId, role: MemberRole },
 		/// Invitation accepted
-		InvitationAccepted { business_id: u32, member: T::AccountId },
+		InvitationAccepted { business_uuid: [u8; 16], member: T::AccountId },
 		/// Invitation rejected
-		InvitationRejected { business_id: u32, invitee: T::AccountId },
+		InvitationRejected { business_uuid: [u8; 16], invitee: T::AccountId },
 		/// Member removed from business
-		MemberRemoved { business_id: u32, member: T::AccountId },
+		MemberRemoved { business_uuid: [u8; 16], member: T::AccountId },
 		/// Ownership transferred
-		OwnershipTransferred { business_id: u32, old_owner: T::AccountId, new_owner: T::AccountId },
+		OwnershipTransferred { business_uuid: [u8; 16], old_owner: T::AccountId, new_owner: T::AccountId },
 		/// Business settings updated
-		BusinessSettingsUpdated { business_id: u32 },
+		BusinessSettingsUpdated { business_uuid: [u8; 16] },
 		/// Business verified
-		BusinessVerified { business_id: u32 },
+		BusinessVerified { business_uuid: [u8; 16] },
 		/// Business configuration updated (encrypted)
-		BusinessConfigUpdated { business_id: u32 },
+		BusinessConfigUpdated { business_uuid: [u8; 16] },
 	}
 
 	/// Errors for the pallet
@@ -210,22 +209,22 @@ pub mod pallet {
 	/// Dispatchable functions
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// Create a new business with hierarchical wallet derivation
+		/// Sync a business from core database to blockchain
 		///
-		/// The derived_public_key should be generated off-business using:
-		/// user_wallet/0/business_id' derivation path
+		/// This is called by the core platform via secure channel to store business data on-chain.
+		/// Business is created in core database first, then synced to blockchain for immutability.
 		///
 		/// Parameters:
 		/// - name: Business name
-		/// - owner_user_index: The user's index (from user-management pallet)
-		/// - derived_public_key: The derived public key for this business
+		/// - business_uuid: UUID from core database (16 bytes)
+		/// - encryption_type: ProjectKey or WalletKey
 		#[pallet::call_index(0)]
 		#[pallet::weight(T::WeightInfo::create_business())]
 		pub fn create_business(
 			origin: OriginFor<T>,
 			name: Vec<u8>,
-			owner_user_index: u32,
-			derived_public_key: [u8; 32],
+			business_uuid: [u8; 16],
+			encryption_type: EncryptionType,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
@@ -233,18 +232,14 @@ pub mod pallet {
 			let bounded_name: BoundedVec<u8, T::MaxBusinessNameLength> =
 				name.clone().try_into().map_err(|_| Error::<T>::BusinessNameTooLong)?;
 
-			// Get next business ID
-			let business_id = BusinessCount::<T>::get();
-
 			let now = frame_system::Pallet::<T>::block_number();
 
-			// Create business with derived wallet info
+			// Create business record (minimal on-chain footprint)
 			let business = Business {
 				name: bounded_name,
 				owner: who.clone(),
-				owner_user_index,
-				business_id,
-				derived_public_key,
+				business_uuid,
+				encryption_type: encryption_type.clone(),
 				created_at: now,
 				is_verified: false,
 				member_count: 1,
@@ -252,23 +247,19 @@ pub mod pallet {
 			};
 
 			// Store business
-			Businesses::<T>::insert(business_id, business);
+			Businesses::<T>::insert(business_uuid, business);
 
 			// Add owner as member
-			BusinessMembers::<T>::insert(business_id, &who, MemberRole::Owner);
+			BusinessMembers::<T>::insert(business_uuid, &who, MemberRole::Owner);
 
 			// Add to user's businesses
-			UserBusinesses::<T>::insert(&who, business_id, ());
-
-			// Increment business count
-			BusinessCount::<T>::mutate(|count| *count = count.saturating_add(1));
+			UserBusinesses::<T>::insert(&who, business_uuid, ());
 
 			// Emit event
 			Self::deposit_event(Event::BusinessCreated {
-				business_id,
+				business_uuid,
 				owner: who,
-				owner_user_index,
-				derived_public_key,
+				encryption_type,
 				name,
 			});
 
@@ -277,13 +268,14 @@ pub mod pallet {
 
 		/// Update business encrypted configuration
 		///
-		/// The config should be encrypted off-business with the business's public key
-		/// and include: statuses, categories, custom params, roles, permissions
+		/// The config is encrypted based on encryption_type:
+		/// - ProjectKey: Encrypted by core with master key
+		/// - WalletKey: Encrypted client-side with user's wallet
 		#[pallet::call_index(1)]
 		#[pallet::weight(T::WeightInfo::update_business_config())]
 		pub fn update_business_config(
 			origin: OriginFor<T>,
-			business_id: u32,
+			business_uuid: [u8; 16],
 			encrypted_config: Vec<u8>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
@@ -293,7 +285,7 @@ pub mod pallet {
 				encrypted_config.try_into().map_err(|_| Error::<T>::ConfigDataTooLong)?;
 
 			// Update business config
-			Businesses::<T>::try_mutate(business_id, |maybe_business| -> DispatchResult {
+			Businesses::<T>::try_mutate(business_uuid, |maybe_business| -> DispatchResult {
 				let business = maybe_business.as_mut().ok_or(Error::<T>::BusinessNotFound)?;
 
 				// Ensure caller is the owner
@@ -306,7 +298,7 @@ pub mod pallet {
 			})?;
 
 			// Emit event
-			Self::deposit_event(Event::BusinessConfigUpdated { business_id });
+			Self::deposit_event(Event::BusinessConfigUpdated { business_uuid });
 
 			Ok(())
 		}
@@ -316,17 +308,17 @@ pub mod pallet {
 		#[pallet::weight(T::WeightInfo::invite_member())]
 		pub fn invite_member(
 			origin: OriginFor<T>,
-			business_id: u32,
+			business_uuid: [u8; 16],
 			invitee: T::AccountId,
 			role: MemberRole,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
 			// Get business
-			let business = Businesses::<T>::get(business_id).ok_or(Error::<T>::BusinessNotFound)?;
+			let business = Businesses::<T>::get(business_uuid).ok_or(Error::<T>::BusinessNotFound)?;
 
 			// Ensure caller is owner or manager
-			let caller_role = BusinessMembers::<T>::get(business_id, &who)
+			let caller_role = BusinessMembers::<T>::get(business_uuid, &who)
 				.ok_or(Error::<T>::NotMember)?;
 			ensure!(
 				matches!(caller_role, MemberRole::Owner | MemberRole::Manager),
@@ -335,13 +327,13 @@ pub mod pallet {
 
 			// Ensure invitee is not already a member
 			ensure!(
-				!BusinessMembers::<T>::contains_key(business_id, &invitee),
+				!BusinessMembers::<T>::contains_key(business_uuid, &invitee),
 				Error::<T>::MemberAlreadyExists
 			);
 
 			// Ensure invitation doesn't already exist
 			ensure!(
-				!Invitations::<T>::contains_key(business_id, &invitee),
+				!Invitations::<T>::contains_key(business_uuid, &invitee),
 				Error::<T>::InvitationAlreadyExists
 			);
 
@@ -349,7 +341,7 @@ pub mod pallet {
 
 			// Create invitation
 			let invitation = Invitation {
-				business_id,
+				business_uuid,
 				invitee: invitee.clone(),
 				role: role.clone(),
 				status: InviteStatus::Pending,
@@ -357,11 +349,11 @@ pub mod pallet {
 			};
 
 			// Store invitation
-			Invitations::<T>::insert(business_id, &invitee, invitation);
+			Invitations::<T>::insert(business_uuid, &invitee, invitation);
 
 			// Emit event
 			Self::deposit_event(Event::MemberInvited {
-				business_id,
+				business_uuid,
 				invitee,
 				role,
 			});
@@ -372,11 +364,11 @@ pub mod pallet {
 		/// Accept an invitation to join a business
 		#[pallet::call_index(3)]
 		#[pallet::weight(T::WeightInfo::accept_invitation())]
-		pub fn accept_invitation(origin: OriginFor<T>, business_id: u32) -> DispatchResult {
+		pub fn accept_invitation(origin: OriginFor<T>, business_uuid: [u8; 16]) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
 			// Get invitation
-			let invitation = Invitations::<T>::get(business_id, &who)
+			let invitation = Invitations::<T>::get(business_uuid, &who)
 				.ok_or(Error::<T>::InvitationNotFound)?;
 
 			// Ensure invitation is pending
@@ -386,20 +378,20 @@ pub mod pallet {
 			);
 
 			// Add member to business
-			BusinessMembers::<T>::insert(business_id, &who, invitation.role);
+			BusinessMembers::<T>::insert(business_uuid, &who, invitation.role);
 
 			// Add to user's businesses
-			UserBusinesses::<T>::insert(&who, business_id, ());
+			UserBusinesses::<T>::insert(&who, business_uuid, ());
 
 			// Increment member count
-			Businesses::<T>::try_mutate(business_id, |maybe_business| -> DispatchResult {
+			Businesses::<T>::try_mutate(business_uuid, |maybe_business| -> DispatchResult {
 				let business = maybe_business.as_mut().ok_or(Error::<T>::BusinessNotFound)?;
 				business.member_count = business.member_count.saturating_add(1);
 				Ok(())
 			})?;
 
 			// Update invitation status
-			Invitations::<T>::try_mutate(business_id, &who, |maybe_invite| -> DispatchResult {
+			Invitations::<T>::try_mutate(business_uuid, &who, |maybe_invite| -> DispatchResult {
 				let invite = maybe_invite.as_mut().ok_or(Error::<T>::InvitationNotFound)?;
 				invite.status = InviteStatus::Accepted;
 				Ok(())
@@ -407,7 +399,7 @@ pub mod pallet {
 
 			// Emit event
 			Self::deposit_event(Event::InvitationAccepted {
-				business_id,
+				business_uuid,
 				member: who,
 			});
 
@@ -417,11 +409,11 @@ pub mod pallet {
 		/// Reject an invitation
 		#[pallet::call_index(4)]
 		#[pallet::weight(T::WeightInfo::reject_invitation())]
-		pub fn reject_invitation(origin: OriginFor<T>, business_id: u32) -> DispatchResult {
+		pub fn reject_invitation(origin: OriginFor<T>, business_uuid: [u8; 16]) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
 			// Update invitation status
-			Invitations::<T>::try_mutate(business_id, &who, |maybe_invite| -> DispatchResult {
+			Invitations::<T>::try_mutate(business_uuid, &who, |maybe_invite| -> DispatchResult {
 				let invite = maybe_invite.as_mut().ok_or(Error::<T>::InvitationNotFound)?;
 				ensure!(
 					invite.status == InviteStatus::Pending,
@@ -433,7 +425,7 @@ pub mod pallet {
 
 			// Emit event
 			Self::deposit_event(Event::InvitationRejected {
-				business_id,
+				business_uuid,
 				invitee: who,
 			});
 
@@ -445,13 +437,13 @@ pub mod pallet {
 		#[pallet::weight(T::WeightInfo::remove_member())]
 		pub fn remove_member(
 			origin: OriginFor<T>,
-			business_id: u32,
+			business_uuid: [u8; 16],
 			member: T::AccountId,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
 			// Get business
-			let business = Businesses::<T>::get(business_id).ok_or(Error::<T>::BusinessNotFound)?;
+			let business = Businesses::<T>::get(business_uuid).ok_or(Error::<T>::BusinessNotFound)?;
 
 			// Ensure caller is owner
 			ensure!(business.owner == who, Error::<T>::NotBusinessOwner);
@@ -461,23 +453,23 @@ pub mod pallet {
 
 			// Ensure member exists
 			ensure!(
-				BusinessMembers::<T>::contains_key(business_id, &member),
+				BusinessMembers::<T>::contains_key(business_uuid, &member),
 				Error::<T>::NotMember
 			);
 
 			// Remove member
-			BusinessMembers::<T>::remove(business_id, &member);
-			UserBusinesses::<T>::remove(&member, business_id);
+			BusinessMembers::<T>::remove(business_uuid, &member);
+			UserBusinesses::<T>::remove(&member, business_uuid);
 
 			// Decrement member count
-			Businesses::<T>::try_mutate(business_id, |maybe_business| -> DispatchResult {
+			Businesses::<T>::try_mutate(business_uuid, |maybe_business| -> DispatchResult {
 				let business = maybe_business.as_mut().ok_or(Error::<T>::BusinessNotFound)?;
 				business.member_count = business.member_count.saturating_sub(1);
 				Ok(())
 			})?;
 
 			// Emit event
-			Self::deposit_event(Event::MemberRemoved { business_id, member });
+			Self::deposit_event(Event::MemberRemoved { business_uuid, member });
 
 			Ok(())
 		}
@@ -487,20 +479,19 @@ pub mod pallet {
 		#[pallet::weight(T::WeightInfo::transfer_ownership())]
 		pub fn transfer_ownership(
 			origin: OriginFor<T>,
-			business_id: u32,
+			business_uuid: [u8; 16],
 			new_owner: T::AccountId,
-			new_owner_user_index: u32,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
 			// Ensure new owner is a member
 			ensure!(
-				BusinessMembers::<T>::contains_key(business_id, &new_owner),
+				BusinessMembers::<T>::contains_key(business_uuid, &new_owner),
 				Error::<T>::NotMember
 			);
 
 			// Update business owner
-			Businesses::<T>::try_mutate(business_id, |maybe_business| -> DispatchResult {
+			Businesses::<T>::try_mutate(business_uuid, |maybe_business| -> DispatchResult {
 				let business = maybe_business.as_mut().ok_or(Error::<T>::BusinessNotFound)?;
 
 				// Ensure caller is current owner
@@ -509,15 +500,14 @@ pub mod pallet {
 				// Update owner
 				let old_owner = business.owner.clone();
 				business.owner = new_owner.clone();
-				business.owner_user_index = new_owner_user_index;
 
 				// Update roles
-				BusinessMembers::<T>::insert(business_id, &new_owner, MemberRole::Owner);
-				BusinessMembers::<T>::insert(business_id, &old_owner, MemberRole::Manager);
+				BusinessMembers::<T>::insert(business_uuid, &new_owner, MemberRole::Owner);
+				BusinessMembers::<T>::insert(business_uuid, &old_owner, MemberRole::Manager);
 
 				// Emit event
 				Self::deposit_event(Event::OwnershipTransferred {
-					business_id,
+					business_uuid,
 					old_owner,
 					new_owner,
 				});
@@ -529,18 +519,18 @@ pub mod pallet {
 		/// Verify a business (requires root/sudo)
 		#[pallet::call_index(7)]
 		#[pallet::weight(T::WeightInfo::verify_business())]
-		pub fn verify_business(origin: OriginFor<T>, business_id: u32) -> DispatchResult {
+		pub fn verify_business(origin: OriginFor<T>, business_uuid: [u8; 16]) -> DispatchResult {
 			ensure_root(origin)?;
 
 			// Update verification status
-			Businesses::<T>::try_mutate(business_id, |maybe_business| -> DispatchResult {
+			Businesses::<T>::try_mutate(business_uuid, |maybe_business| -> DispatchResult {
 				let business = maybe_business.as_mut().ok_or(Error::<T>::BusinessNotFound)?;
 				business.is_verified = true;
 				Ok(())
 			})?;
 
 			// Emit event
-			Self::deposit_event(Event::BusinessVerified { business_id });
+			Self::deposit_event(Event::BusinessVerified { business_uuid });
 
 			Ok(())
 		}

@@ -57,6 +57,15 @@ pub mod pallet {
 		ChaCha20Poly1305,
 	}
 
+	/// Encryption type - who performed the encryption
+	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	pub enum EncryptionType {
+		/// Encrypted by core platform with project master key (for email users)
+		ProjectKey,
+		/// Encrypted client-side with user's wallet key (for wallet users)
+		WalletKey,
+	}
+
 	/// Encryption metadata
 	#[derive(CloneNoBound, Encode, Decode, PartialEqNoBound, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(T))]
@@ -81,6 +90,10 @@ pub mod pallet {
 		pub plaintext_hash: [u8; 32],
 		/// Encryption metadata
 		pub metadata: EncryptionMetadata<T>,
+		/// Encryption type (ProjectKey or WalletKey)
+		pub encryption_type: EncryptionType,
+		/// Wallet public key (if encrypted with WalletKey) - 33 bytes for compressed P-256
+		pub wallet_public_key: Option<BoundedVec<u8, ConstU32<33>>>,
 		/// Owner of the data
 		pub owner: T::AccountId,
 		/// Timestamp of encryption
@@ -110,6 +123,7 @@ pub mod pallet {
 			data_hash: [u8; 32],
 			owner: T::AccountId,
 			algorithm: EncryptionAlgorithm,
+			encryption_type: EncryptionType,
 		},
 		/// Encrypted data retrieved
 		DataRetrieved {
@@ -144,13 +158,15 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		/// Store encrypted data on-chain
 		///
-		/// Data must be encrypted OFF-CHAIN before calling this function.
+		/// Data must be encrypted OFF-CHAIN (or by core) before calling this function.
 		/// This function only stores the ciphertext and metadata.
 		///
 		/// Parameters:
 		/// - ciphertext: Encrypted data bytes
 		/// - plaintext_hash: SHA-256 hash of original plaintext (for verification)
 		/// - metadata: Encryption metadata (algorithm, IV, key_id, salt)
+		/// - encryption_type: ProjectKey (core encrypted) or WalletKey (client encrypted)
+		/// - wallet_public_key: Required if encryption_type is WalletKey
 		#[pallet::call_index(0)]
 		#[pallet::weight(10_000)]
 		pub fn store_encrypted_data(
@@ -158,12 +174,23 @@ pub mod pallet {
 			ciphertext: Vec<u8>,
 			plaintext_hash: [u8; 32],
 			metadata: EncryptionMetadata<T>,
+			encryption_type: EncryptionType,
+			wallet_public_key: Option<Vec<u8>>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
 			// Validate ciphertext size
 			let bounded_ciphertext: BoundedVec<u8, T::MaxEncryptedDataLength> =
 				ciphertext.try_into().map_err(|_| Error::<T>::EncryptedDataTooLong)?;
+
+			// Validate wallet public key if WalletKey encryption
+			let bounded_wallet_key = if encryption_type == EncryptionType::WalletKey {
+				wallet_public_key
+					.map(|key| key.try_into().ok())
+					.flatten()
+			} else {
+				None
+			};
 
 			// Compute data hash (used as storage key)
 			let data_hash = sp_io::hashing::blake2_256(&plaintext_hash);
@@ -181,6 +208,8 @@ pub mod pallet {
 				ciphertext: bounded_ciphertext,
 				plaintext_hash,
 				metadata: metadata.clone(),
+				encryption_type: encryption_type.clone(),
+				wallet_public_key: bounded_wallet_key,
 				owner: who.clone(),
 				created_at: now,
 			};
@@ -196,6 +225,7 @@ pub mod pallet {
 				data_hash,
 				owner: who,
 				algorithm: metadata.algorithm,
+				encryption_type,
 			});
 
 			Ok(())

@@ -64,20 +64,32 @@ pub mod pallet {
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
 
-	/// User profile information
+	/// User type enumeration
+	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	pub enum UserType {
+		/// Email/password user
+		Email,
+		/// Wallet-only user
+		Wallet,
+		/// Hybrid (email + wallet connected)
+		Hybrid,
+	}
+
+	/// User profile information (minimal on-chain footprint)
+	/// Full user data stored in core database
 	#[derive(CloneNoBound, Encode, Decode, Eq, PartialEqNoBound, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[scale_info(skip_type_params(T))]
 	pub struct UserProfile<T: Config> {
+		/// User type
+		pub user_type: UserType,
 		/// User's display name
 		pub name: BoundedVec<u8, T::MaxProfileLength>,
-		/// User's email (hashed for privacy)
-		pub email_hash: [u8; 32],
-		/// Account ID (wallet address)
-		pub account_id: T::AccountId,
-		/// User index for wallet derivation (m/44'/354'/user_index')
-		pub user_index: u32,
-		/// Derived public key (32 bytes)
-		pub derived_public_key: [u8; 32],
+		/// User's email (hashed for privacy) - None for wallet-only users
+		pub email_hash: Option<[u8; 32]>,
+		/// Account ID (wallet address) - Some for wallet/hybrid users
+		pub account_id: Option<T::AccountId>,
+		/// Wallet public key (for wallet users only)
+		pub wallet_public_key: Option<BoundedVec<u8, ConstU32<33>>>,
 		/// Verification status
 		pub is_verified: bool,
 		/// Registration timestamp
@@ -157,16 +169,14 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// User registered successfully with derived wallet
+		/// User registered successfully
 		UserRegistered {
-			account: T::AccountId,
-			email_hash: [u8; 32],
-			user_index: u32,
-			derived_public_key: [u8; 32],
+			user_type: UserType,
+			name: Vec<u8>,
 		},
 		/// Email linked to account
 		EmailLinked { account: T::AccountId, email_hash: [u8; 32] },
-		/// Wallet linked to account
+		/// Wallet linked to account (for hybrid users)
 		WalletLinked { account: T::AccountId },
 		/// Profile updated
 		ProfileUpdated { account: T::AccountId },

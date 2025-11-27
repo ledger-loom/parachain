@@ -16,7 +16,7 @@ members = [
     "pallets/role-permissions",
     "pallets/external-integrations",
     "pallets/security",
-    "runtime",
+    "runtime", "pallets/secure-channel",
 ]
 resolver = "2"
 

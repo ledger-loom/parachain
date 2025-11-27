@@ -30,6 +30,7 @@ pallet-supply-chain-tracking = { path = "../pallets/supply-chain-tracking", defa
 pallet-role-permissions = { path = "../pallets/role-permissions", default-features = false }
 pallet-external-integrations = { path = "../pallets/external-integrations", default-features = false }
 pallet-security = { path = "../pallets/security", default-features = false }
+pallet-secure-channel = { path = "../pallets/secure-channel", default-features = false }
 
 # Polkadot SDK with all needed features
 polkadot-sdk = { workspace = true, features = [
@@ -93,6 +94,7 @@ std = [
 	"pallet-role-permissions/std",
 	"pallet-external-integrations/std",
 	"pallet-security/std",
+	"pallet-secure-channel/std",
 ]
 
 runtime-benchmarks = [

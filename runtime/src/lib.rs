@@ -711,6 +711,14 @@ impl pallet_security::Config for Runtime {
 	type SessionTimeout = ConstU32<3600>;
 }
 
+// Secure Channel Pallet Configuration
+impl pallet_secure_channel::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type MaxPublicKeyLength = ConstU32<33>;  // Compressed P-256 public key
+	type MaxKeyRotationHistory = ConstU32<100>;
+	type MaxSignatureLength = ConstU32<64>;  // ECDSA signature
+}
+
 // Construct runtime
 construct_runtime!(
 	pub struct Runtime {
@@ -749,6 +757,7 @@ construct_runtime!(
 		RolePermissions: pallet_role_permissions,
 		ExternalIntegrations: pallet_external_integrations,
 		Security: pallet_security,
+		SecureChannel: pallet_secure_channel,
 	}
 );
 
