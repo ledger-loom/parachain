@@ -31,7 +31,7 @@ pub mod pallet {
 	use scale_info::prelude::vec::Vec;
 
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	pub trait Config: frame_system::Config + core::fmt::Debug {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
 		/// Maximum length of encrypted data
@@ -47,7 +47,7 @@ pub mod pallet {
 	pub struct Pallet<T>(_);
 
 	/// Encryption algorithm type
-	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	pub enum EncryptionAlgorithm {
 		/// ECIES with P-256 curve
 		ECIES,
@@ -58,7 +58,7 @@ pub mod pallet {
 	}
 
 	/// Encryption type - who performed the encryption
-	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	pub enum EncryptionType {
 		/// Encrypted by core platform with project master key (for email users)
 		ProjectKey,
@@ -193,7 +193,7 @@ pub mod pallet {
 			};
 
 			// Compute data hash (used as storage key)
-			let data_hash = sp_io::hashing::blake2_256(&plaintext_hash);
+			let data_hash = frame::deps::sp_io::hashing::blake2_256(&plaintext_hash);
 
 			// Ensure data doesn't already exist
 			ensure!(

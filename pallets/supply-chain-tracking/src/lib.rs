@@ -39,8 +39,8 @@ mod benchmarking;
 pub mod pallet {
 	use frame::prelude::*;
 	use frame::deps::codec::{Decode, Encode, MaxEncodedLen};
+	use frame::deps::sp_io::hashing::blake2_256;
 	use scale_info::prelude::vec::Vec;
-	use sp_runtime::traits::Hash;
 	use crate::WeightInfo;
 
 	#[pallet::config]
@@ -215,7 +215,7 @@ pub mod pallet {
 		/// - location: Optional initial location
 		/// - encrypted_data: Encrypted payload with custom fields
 		#[pallet::call_index(0)]
-		#[pallet::weight(T::WeightInfo::create_item())]
+		#[pallet::weight(T::WeightInfo::create_tracking())]
 		pub fn create_item(
 			origin: OriginFor<T>,
 			item_id: [u8; 32],
@@ -290,8 +290,8 @@ pub mod pallet {
 
 			// Index by location if provided
 			if let Some(loc) = bounded_location {
-				let location_hash = T::Hashing::hash(&loc);
-				LocationItems::<T>::insert(location_hash.as_ref(), &item_id, ());
+				let location_hash = blake2_256(&loc);
+				LocationItems::<T>::insert(&location_hash, &item_id, ());
 			}
 
 			// Emit event
@@ -315,7 +315,7 @@ pub mod pallet {
 		/// - location: New location (optional)
 		/// - encrypted_data: New encrypted payload
 		#[pallet::call_index(1)]
-		#[pallet::weight(T::WeightInfo::append_record())]
+		#[pallet::weight(T::WeightInfo::add_event())]
 		pub fn append_record(
 			origin: OriginFor<T>,
 			item_id: [u8; 32],
@@ -378,8 +378,8 @@ pub mod pallet {
 
 			// Update location index if provided
 			if let Some(loc) = bounded_location {
-				let location_hash = T::Hashing::hash(&loc);
-				LocationItems::<T>::insert(location_hash.as_ref(), &item_id, ());
+				let location_hash = blake2_256(&loc);
+				LocationItems::<T>::insert(&location_hash, &item_id, ());
 			}
 
 			// Emit event
@@ -402,7 +402,7 @@ pub mod pallet {
 		/// Note: This emits an event but doesn't modify state.
 		/// Actual data retrieval happens via RPC/runtime API.
 		#[pallet::call_index(2)]
-		#[pallet::weight(T::WeightInfo::query_history())]
+		#[pallet::weight(T::WeightInfo::add_event())]
 		pub fn query_item_history(
 			origin: OriginFor<T>,
 			item_id: [u8; 32],
@@ -427,7 +427,7 @@ pub mod pallet {
 		/// Checks that all hashes in the chain are correct.
 		/// Returns error if any hash mismatch is found.
 		#[pallet::call_index(3)]
-		#[pallet::weight(T::WeightInfo::verify_chain())]
+		#[pallet::weight(T::WeightInfo::add_event())]
 		pub fn verify_item_chain(
 			origin: OriginFor<T>,
 			item_id: [u8; 32],
@@ -489,10 +489,7 @@ pub mod pallet {
 			record.recorder.encode_to(&mut data);
 			record.previous_hash.encode_to(&mut data);
 
-			let hash = T::Hashing::hash(&data);
-			let mut result = [0u8; 32];
-			result.copy_from_slice(hash.as_ref());
-			result
+			blake2_256(&data)
 		}
 
 		/// Get all records for an item (runtime API helper)

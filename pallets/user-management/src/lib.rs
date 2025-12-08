@@ -65,7 +65,7 @@ pub mod pallet {
 	pub struct Pallet<T>(_);
 
 	/// User type enumeration
-	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	pub enum UserType {
 		/// Email/password user
 		Email,
@@ -229,7 +229,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			name: Vec<u8>,
 			email_hash: [u8; 32],
-			derived_public_key: [u8; 32],
+			_derived_public_key: [u8; 32],
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
@@ -244,20 +244,20 @@ pub mod pallet {
 
 			// Convert name to bounded vec
 			let bounded_name: BoundedVec<u8, T::MaxProfileLength> =
-				name.try_into().map_err(|_| Error::<T>::ProfileTooLong)?;
+				name.clone().try_into().map_err(|_| Error::<T>::ProfileTooLong)?;
 
 			let now = frame_system::Pallet::<T>::block_number();
 
 			// Get current user count as the user index
-			let user_index = UserCount::<T>::get();
+			let _user_index = UserCount::<T>::get();
 
 			// Create user profile with derived wallet information
 			let profile = UserProfile {
+				user_type: UserType::Hybrid,
 				name: bounded_name,
-				email_hash,
-				account_id: who.clone(),
-				user_index,
-				derived_public_key,
+				email_hash: Some(email_hash),
+				account_id: Some(who.clone()),
+				wallet_public_key: None,
 				is_verified: false,
 				registered_at: now,
 				updated_at: now,
@@ -274,10 +274,8 @@ pub mod pallet {
 
 			// Emit event with derived wallet info
 			Self::deposit_event(Event::UserRegistered {
-				account: who,
-				email_hash,
-				user_index,
-				derived_public_key,
+				user_type: UserType::Hybrid,
+				name,
 			});
 
 			Ok(())
@@ -307,7 +305,7 @@ pub mod pallet {
 
 		/// Link email to existing account
 		#[pallet::call_index(1)]
-		#[pallet::weight(T::WeightInfo::link_email())]
+		#[pallet::weight(T::WeightInfo::register_user())]
 		pub fn link_email(
 			origin: OriginFor<T>,
 			email_hash: [u8; 32],
@@ -326,7 +324,7 @@ pub mod pallet {
 			// Update user's email
 			Users::<T>::try_mutate(&who, |maybe_profile| -> DispatchResult {
 				let profile = maybe_profile.as_mut().ok_or(Error::<T>::UserNotFound)?;
-				profile.email_hash = email_hash;
+				profile.email_hash = Some(email_hash);
 				profile.updated_at = frame_system::Pallet::<T>::block_number();
 				Ok(())
 			})?;

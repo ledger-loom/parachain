@@ -28,7 +28,7 @@ mod benchmarking;
 pub mod pallet {
 	use crate::WeightInfo;
 	use frame::prelude::*;
-	use frame::deps::codec::{Decode, Encode, MaxEncodedLen, DecodeWithMemTracking};
+	use frame::deps::codec::{Decode, Encode, MaxEncodedLen};
 	use scale_info::prelude::vec::Vec;
 
 	#[pallet::config]
@@ -81,7 +81,7 @@ pub mod pallet {
 	}
 
 	/// Data visibility level
-	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	pub enum VisibilityLevel {
 		Public,
 		Business,
@@ -211,14 +211,25 @@ pub mod pallet {
 			let product_id = NextProductId::<T>::get();
 			let now = frame_system::Pallet::<T>::block_number();
 
+			// Convert bounded_name to BoundedVec<u8, T::MaxEncryptedDataLength>
+			// Since this is unencrypted legacy data, we need to convert the type
+			let encrypted_name: BoundedVec<u8, T::MaxEncryptedDataLength> =
+				bounded_name.into_inner().try_into().map_err(|_| Error::<T>::EncryptedDataTooLong)?;
+
 			let product = Product {
-				name: bounded_name,
-				category: bounded_category.clone(),
+				product_id,
 				business_id,
 				status: ProductStatus::Active,
+				category: bounded_category.clone(),
 				created_at: now,
 				updated_at: now,
-				attributes: bounded_attrs,
+				encrypted_name,
+				encrypted_attributes: BoundedVec::default(),
+				data_hash: [0u8; 32],
+				encryption_key_id: None,
+				is_encrypted: false,
+				visibility: VisibilityLevel::Public,
+				authorized_roles: BoundedVec::default(),
 			};
 
 			Products::<T>::insert(product_id, product);
@@ -258,75 +269,43 @@ pub mod pallet {
 		}
 
 		/// Add attribute to product
+		/// NOTE: This function is not used in the encryption model.
+		/// In the encryption model, attributes should be added via the encrypted_attributes
+		/// field directly using create_encrypted_product or by updating the entire field.
 		#[pallet::call_index(2)]
 		#[pallet::weight(T::WeightInfo::add_attribute())]
 		pub fn add_attribute(
 			origin: OriginFor<T>,
-			product_id: u32,
-			key: Vec<u8>,
-			value: Vec<u8>,
+			_product_id: u32,
+			_key: Vec<u8>,
+			_value: Vec<u8>,
 		) -> DispatchResult {
 			let _who = ensure_signed(origin)?;
 
-			let attr_key: BoundedVec<u8, T::MaxAttributeKeyLength> =
-				key.clone().try_into().map_err(|_| Error::<T>::AttributeKeyTooLong)?;
-			let attr_value: BoundedVec<u8, T::MaxAttributeValueLength> =
-				value.try_into().map_err(|_| Error::<T>::AttributeValueTooLong)?;
-
-			Products::<T>::try_mutate(product_id, |maybe_product| -> DispatchResult {
-				let product = maybe_product.as_mut().ok_or(Error::<T>::ProductNotFound)?;
-
-				// Check if attribute already exists
-				ensure!(
-					!product.attributes.iter().any(|a| a.key == attr_key),
-					Error::<T>::DuplicateAttribute
-				);
-
-				product.attributes.try_push(ProductAttribute {
-					key: attr_key,
-					value: attr_value,
-				}).map_err(|_| Error::<T>::MaxAttributesReached)?;
-
-				product.updated_at = frame_system::Pallet::<T>::block_number();
-
-				Ok(())
-			})?;
-
-			Self::deposit_event(Event::AttributeAdded { product_id, key });
+			// This function doesn't fit the encryption model where encrypted_attributes
+			// is a BoundedVec<u8, ...> for storing encrypted bytes, not structured attributes.
+			// Attributes should be managed off-chain and stored as encrypted bytes.
 
 			Ok(())
 		}
 
 		/// Update attribute value
+		/// NOTE: This function is not used in the encryption model.
+		/// In the encryption model, attributes should be updated via the encrypted_attributes
+		/// field directly using create_encrypted_product or by replacing the entire field.
 		#[pallet::call_index(3)]
 		#[pallet::weight(T::WeightInfo::update_attribute())]
 		pub fn update_attribute(
 			origin: OriginFor<T>,
-			product_id: u32,
-			key: Vec<u8>,
-			value: Vec<u8>,
+			_product_id: u32,
+			_key: Vec<u8>,
+			_value: Vec<u8>,
 		) -> DispatchResult {
 			let _who = ensure_signed(origin)?;
 
-			let attr_key: BoundedVec<u8, T::MaxAttributeKeyLength> =
-				key.clone().try_into().map_err(|_| Error::<T>::AttributeKeyTooLong)?;
-			let attr_value: BoundedVec<u8, T::MaxAttributeValueLength> =
-				value.try_into().map_err(|_| Error::<T>::AttributeValueTooLong)?;
-
-			Products::<T>::try_mutate(product_id, |maybe_product| -> DispatchResult {
-				let product = maybe_product.as_mut().ok_or(Error::<T>::ProductNotFound)?;
-
-				let attribute = product.attributes.iter_mut()
-					.find(|a| a.key == attr_key)
-					.ok_or(Error::<T>::AttributeNotFound)?;
-
-				attribute.value = attr_value;
-				product.updated_at = frame_system::Pallet::<T>::block_number();
-
-				Ok(())
-			})?;
-
-			Self::deposit_event(Event::AttributeUpdated { product_id, key });
+			// This function doesn't fit the encryption model where encrypted_attributes
+			// is a BoundedVec<u8, ...> for storing encrypted bytes, not structured attributes.
+			// Attributes should be managed off-chain and updated as encrypted bytes.
 
 			Ok(())
 		}

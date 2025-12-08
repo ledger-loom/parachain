@@ -33,8 +33,8 @@ pub use weights::*;
 #[frame::pallet(dev_mode)]
 pub mod pallet {
 	use super::*;
-	use frame::prelude::*;
-	use scale_info::prelude::{vec, vec::Vec};
+	use frame::prelude::{DispatchResult, Get, IsType, ConstU32, BoundedVec, Blake2_128Concat, ValueQuery, StorageMap, OptionQuery, ensure, BlockNumberFor};
+	use scale_info::prelude::vec::Vec;
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -823,7 +823,7 @@ pub mod pallet {
 		pub fn trigger_webhooks(
 			account: &T::AccountId,
 			event_type: WebhookEventType,
-			payload: Vec<u8>,
+			_payload: Vec<u8>,
 		) {
 			let webhooks = Webhooks::<T>::get(account);
 			for webhook in webhooks.iter() {

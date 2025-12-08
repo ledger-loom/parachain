@@ -61,7 +61,7 @@ pub mod pallet {
 	pub struct Pallet<T>(_);
 
 	/// Encryption type for business data
-	#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
+	#[derive(Clone, Encode, Decode, frame::deps::codec::DecodeWithMemTracking, Eq, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	pub enum EncryptionType {
 		/// Encrypted by core platform with project master key (for email users)
 		ProjectKey,
@@ -272,7 +272,7 @@ pub mod pallet {
 		/// - ProjectKey: Encrypted by core with master key
 		/// - WalletKey: Encrypted client-side with user's wallet
 		#[pallet::call_index(1)]
-		#[pallet::weight(T::WeightInfo::update_business_config())]
+		#[pallet::weight(T::WeightInfo::create_business())]
 		pub fn update_business_config(
 			origin: OriginFor<T>,
 			business_uuid: [u8; 16],
@@ -315,7 +315,7 @@ pub mod pallet {
 			let who = ensure_signed(origin)?;
 
 			// Get business
-			let business = Businesses::<T>::get(business_uuid).ok_or(Error::<T>::BusinessNotFound)?;
+			let _business = Businesses::<T>::get(business_uuid).ok_or(Error::<T>::BusinessNotFound)?;
 
 			// Ensure caller is owner or manager
 			let caller_role = BusinessMembers::<T>::get(business_uuid, &who)

@@ -16,7 +16,9 @@ members = [
     "pallets/role-permissions",
     "pallets/external-integrations",
     "pallets/security",
-    "runtime", "pallets/secure-channel",
+    "pallets/secure-channel",
+    "pallets/encrypted-data",
+    "runtime",
 ]
 resolver = "2"
 
@@ -30,6 +32,8 @@ pallet-supply-chain-tracking = { path = "./pallets/supply-chain-tracking", defau
 pallet-role-permissions = { path = "./pallets/role-permissions", default-features = false }
 pallet-external-integrations = { path = "./pallets/external-integrations", default-features = false }
 pallet-security = { path = "./pallets/security", default-features = false }
+pallet-secure-channel = { path = "./pallets/secure-channel", default-features = false }
+pallet-encrypted-data = { path = "./pallets/encrypted-data", default-features = false }
 
 # External dependencies
 clap = { version = "4.5.13" }

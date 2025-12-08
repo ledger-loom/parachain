@@ -33,7 +33,7 @@ pub use weights::*;
 #[frame::pallet(dev_mode)]
 pub mod pallet {
 	use super::*;
-	use frame::prelude::*;
+	use frame::prelude::{DispatchResult, Get, IsType, ConstU32, BoundedVec, Blake2_128Concat, ValueQuery, StorageMap, OptionQuery, ensure, BlockNumberFor};
 	use scale_info::prelude::{vec, vec::Vec};
 
 	#[pallet::pallet]
@@ -454,7 +454,7 @@ pub mod pallet {
 				Error::<T>::EncryptionKeyAlreadyExists
 			);
 
-			let key_hash = T::Hashing::hash_of(&public_key);
+			let _key_hash = T::Hashing::hash_of(&public_key);
 
 			let key_info = EncryptionKeyInfo {
 				public_key: public_key.try_into().map_err(|_| Error::<T>::InvalidEncryptionKey)?,
@@ -760,7 +760,7 @@ pub mod pallet {
 		#[pallet::weight(T::WeightInfo::verify_mfa())]
 		pub fn verify_mfa(
 			origin: OriginFor<T>,
-			code: Vec<u8>,
+			_code: Vec<u8>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
@@ -825,7 +825,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			provider: OAuthProvider,
 			oauth_user_id: Vec<u8>,
-			access_token: Vec<u8>,
+			_access_token: Vec<u8>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 

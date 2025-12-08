@@ -9,8 +9,8 @@ use polkadot_sdk::cumulus_pallet_parachain_system::RelayNumberStrictlyIncreases;
 use polkadot_sdk::sp_api::impl_runtime_apis;
 use polkadot_sdk::sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use polkadot_sdk::sp_runtime::{
-	create_runtime_str, generic, impl_opaque_keys,
-	traits::{AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, Verify},
+	generic, impl_opaque_keys,
+	traits::{BlakeTwo256, Block as BlockT, IdentifyAccount, Verify},
 	transaction_validity::{TransactionSource, TransactionValidity},
 	ApplyExtrinsicResult, MultiSignature,
 };
@@ -19,12 +19,13 @@ use polkadot_sdk::sp_std::prelude::*;
 #[cfg(feature = "std")]
 use polkadot_sdk::sp_version::NativeVersion;
 use polkadot_sdk::sp_version::RuntimeVersion;
+use polkadot_sdk::sp_std::borrow::Cow;
 
 use polkadot_sdk::frame_support::{
 	construct_runtime,
 	dispatch::DispatchClass,
 	parameter_types,
-	traits::{ConstBool, ConstU128, ConstU32, ConstU64, ConstU8, Everything, Nothing},
+	traits::{ConstBool, ConstU128, ConstU32, ConstU8, Everything, Nothing},
 	weights::{ConstantMultiplier, Weight},
 	PalletId,
 };
@@ -140,9 +141,16 @@ impl_opaque_keys! {
 	}
 }
 
+/// The version information used to identify this runtime when compiled natively.
+#[cfg(feature = "std")]
+pub fn native_version() -> NativeVersion {
+	NativeVersion { runtime_version: VERSION, can_author_with: Default::default() }
+}
+
+#[polkadot_sdk::sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-	spec_name: create_runtime_str!("supply-chain-parachain"),
-	impl_name: create_runtime_str!("supply-chain-parachain"),
+	spec_name: Cow::Borrowed("supply-chain-parachain"),
+	impl_name: Cow::Borrowed("supply-chain-parachain"),
 	authoring_version: 1,
 	spec_version: 1,
 	impl_version: 0,
@@ -192,12 +200,6 @@ const MAXIMUM_BLOCK_WEIGHT: Weight = Weight::from_parts(
 	WEIGHT_REF_TIME_PER_SECOND.saturating_mul(2),
 	polkadot_sdk::cumulus_primitives_core::relay_chain::MAX_POV_SIZE as u64,
 );
-
-/// The version information used to identify this runtime when compiled natively.
-#[cfg(feature = "std")]
-pub fn native_version() -> NativeVersion {
-	NativeVersion { runtime_version: VERSION, can_author_with: Default::default() }
-}
 
 parameter_types! {
 	pub const BlockHashCount: BlockNumber = 2400;
@@ -655,9 +657,10 @@ impl pallet_user_management::Config for Runtime {
 impl pallet_business_management::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type WeightInfo = pallet_business_management::weights::SubstrateWeight<Runtime>;
-	type MaxMembers = ConstU32<100>;
 	type MaxBusinessNameLength = ConstU32<128>;
+	type MaxMembers = ConstU32<100>;
 	type MaxPendingInvites = ConstU32<50>;
+	type MaxConfigDataLength = ConstU32<1024>;
 }
 
 // Product Management Pallet Configuration
@@ -669,15 +672,18 @@ impl pallet_product_management::Config for Runtime {
 	type MaxAttributes = ConstU32<20>;
 	type MaxAttributeKeyLength = ConstU32<64>;
 	type MaxAttributeValueLength = ConstU32<256>;
+	type MaxEncryptedDataLength = ConstU32<1024>;
+	type MaxAuthorizedRoles = ConstU32<10>;
 }
 
 // Supply Chain Tracking Pallet Configuration
 impl pallet_supply_chain_tracking::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type WeightInfo = pallet_supply_chain_tracking::weights::SubstrateWeight<Runtime>;
+	type MaxEncryptedDataLength = ConstU32<1024>;
+	type MaxStatusLength = ConstU32<64>;
 	type MaxLocationLength = ConstU32<128>;
-	type MaxNotesLength = ConstU32<512>;
-	type MaxEvents = ConstU32<100>;
+	type MaxHistoryRecords = ConstU32<100>;
 }
 
 // Role & Permissions Pallet Configuration
