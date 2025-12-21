@@ -21,6 +21,7 @@ supply-chain-runtime = { workspace = true }
 polkadot-sdk = { workspace = true, features = ["node"] }
 prometheus-endpoint = { workspace = true, default-features = true }
 serde = { features = ["derive"], workspace = true, default-features = true }
+serde_json = { workspace = true, default-features = true }
 
 [build-dependencies]
 polkadot-sdk = { workspace = true, features = ["substrate-build-script-utils"] }

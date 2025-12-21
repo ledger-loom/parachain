@@ -20,6 +20,7 @@ hex-literal = { workspace = true, optional = true, default-features = true }
 log = { workspace = true, default-features = false }
 scale-info = { workspace = true, default-features = false, features = ["derive", "serde"] }
 serde = { features = ["derive"], workspace = true, optional = true, default-features = false }
+serde_json = { workspace = true, default-features = false, features = ["alloc"] }
 smallvec = "1.11.0"
 
 # Local
@@ -64,6 +65,7 @@ polkadot-sdk = { workspace = true, features = [
 	"sp-api",
 	"sp-consensus-aura",
 	"sp-core",
+	"sp-genesis-builder",
 	"sp-io",
 	"sp-runtime",
 	"sp-std",
@@ -86,6 +88,7 @@ std = [
 	"cumulus-pallet-parachain-system/std",
 	"scale-info/std",
 	"serde",
+	"serde_json/std",
 	"substrate-wasm-builder",
 	"pallet-user-management/std",
 	"pallet-business-management/std",

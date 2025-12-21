@@ -141,6 +141,87 @@ impl_opaque_keys! {
 	}
 }
 
+// Helper function to build genesis configuration presets
+#[cfg(feature = "std")]
+fn get_preset_json(preset_id_str: &str) -> Option<Vec<u8>> {
+	use polkadot_sdk::sp_core::crypto::Ss58Codec;
+
+	log::info!("🔍 GenesisBuilder: get_preset_json called with: '{}'", preset_id_str);
+
+	let result = match preset_id_str {
+		"development" | "local_testnet" => {
+			// Alice's address
+			let alice: AccountId = polkadot_sdk::sp_core::sr25519::Public::from_ss58check("5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY")
+				.expect("Alice address should be valid").into();
+			let alice_aura: AuraId = polkadot_sdk::sp_core::sr25519::Public::from_ss58check("5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY")
+				.expect("Alice address should be valid").into();
+
+			// Bob's address
+			let bob: AccountId = polkadot_sdk::sp_core::sr25519::Public::from_ss58check("5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty")
+				.expect("Bob address should be valid").into();
+
+			// Charlie's address
+			let charlie: AccountId = polkadot_sdk::sp_core::sr25519::Public::from_ss58check("5FLSigC9HGRKVhB9FiEo4Y3koPsNmBmLJbpXg2mp1hXcS59Y")
+				.expect("Charlie address should be valid").into();
+
+			let initial_authorities: Vec<(AccountId, AuraId)> = vec![(alice.clone(), alice_aura)];
+			let endowed_accounts: Vec<AccountId> = vec![alice.clone(), bob, charlie];
+			let root_key = alice.clone();
+
+			let genesis = RuntimeGenesisConfig {
+				system: Default::default(),
+				balances: polkadot_sdk::pallet_balances::GenesisConfig {
+					balances: endowed_accounts.iter().cloned().map(|k| (k, 1u128 << 60)).collect(),
+					dev_accounts: Default::default(),
+				},
+				parachain_info: polkadot_sdk::staging_parachain_info::GenesisConfig {
+					parachain_id: 2000.into(),
+					..Default::default()
+				},
+				collator_selection: polkadot_sdk::pallet_collator_selection::GenesisConfig {
+					invulnerables: initial_authorities.iter().map(|x| x.0.clone()).collect(),
+					candidacy_bond: EXISTENTIAL_DEPOSIT * 16,
+					..Default::default()
+				},
+				session: polkadot_sdk::pallet_session::GenesisConfig {
+					keys: initial_authorities
+						.iter()
+						.map(|x| {
+							(
+								x.0.clone(),
+								x.0.clone(),
+								SessionKeys { aura: x.1.clone() },
+							)
+						})
+						.collect(),
+					..Default::default()
+				},
+				sudo: polkadot_sdk::pallet_sudo::GenesisConfig {
+					key: Some(root_key),
+				},
+				parachain_system: Default::default(),
+				aura: Default::default(),
+				aura_ext: Default::default(),
+				transaction_payment: Default::default(),
+				polkadot_xcm: Default::default(),
+				role_permissions: Default::default(),
+			};
+
+			let json_str = serde_json::to_string(&genesis)
+				.expect("Genesis config serialization should not fail");
+			log::info!("✅ GenesisBuilder: Successfully created genesis config, length: {} bytes", json_str.len());
+			Some(json_str.into_bytes())
+		},
+		_ => {
+			log::warn!("⚠️  GenesisBuilder: Unknown preset requested: '{}'", preset_id_str);
+			None
+		}
+	};
+
+	log::info!("📤 GenesisBuilder: Returning result: {}", if result.is_some() { "Some(...)" } else { "None" });
+	result
+}
+
 /// The version information used to identify this runtime when compiled natively.
 #[cfg(feature = "std")]
 pub fn native_version() -> NativeVersion {
@@ -998,6 +1079,52 @@ impl_runtime_apis! {
 			add_benchmark!(params, batches, pallet_security, Security);
 
 			Ok(batches)
+		}
+	}
+
+	impl polkadot_sdk::sp_genesis_builder::GenesisBuilder<Block> for Runtime {
+		fn build_state(config: Vec<u8>) -> polkadot_sdk::sp_genesis_builder::Result {
+			polkadot_sdk::frame_support::genesis_builder_helper::build_state::<RuntimeGenesisConfig>(config)
+		}
+
+		fn get_preset(id: &Option<polkadot_sdk::sp_genesis_builder::PresetId>) -> Option<Vec<u8>> {
+			#[cfg(feature = "std")]
+			{
+				use core::ops::Deref;
+				log::info!("🔧 GenesisBuilder::get_preset called with: {:?}", id.as_ref().map(|p| p.deref()));
+
+				let preset_name = match id {
+					Some(preset_id) => preset_id.deref(),
+					None => "development",
+				};
+
+				let result = get_preset_json(preset_name).or_else(|| {
+					log::warn!("⚠️  Fallback: Creating default genesis config");
+					get_preset_json("development")
+				});
+
+				log::info!("📦 GenesisBuilder::get_preset returning: {}", if result.is_some() { "Some" } else { "None - THIS IS BAD!" });
+				result
+			}
+			#[cfg(not(feature = "std"))]
+			{
+				let _ = id;
+				None
+			}
+		}
+
+		fn preset_names() -> Vec<polkadot_sdk::sp_genesis_builder::PresetId> {
+			#[cfg(feature = "std")]
+			{
+				vec![
+					polkadot_sdk::sp_genesis_builder::PresetId::from("development"),
+					polkadot_sdk::sp_genesis_builder::PresetId::from("local_testnet"),
+				]
+			}
+			#[cfg(not(feature = "std"))]
+			{
+				vec![]
+			}
 		}
 	}
 }
