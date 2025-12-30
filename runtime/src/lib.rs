@@ -744,6 +744,14 @@ impl pallet_business_management::Config for Runtime {
 	type MaxConfigDataLength = ConstU32<1024>;
 }
 
+// Product Items Pallet Configuration
+impl pallet_product_items::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type MaxItemNameLength = ConstU32<100>;
+	type MaxUnitLength = ConstU32<50>;
+	type MaxDescriptionLength = ConstU32<500>;
+}
+
 // Product Management Pallet Configuration
 impl pallet_product_management::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
@@ -839,6 +847,7 @@ construct_runtime!(
 		// Supply Chain Pallets
 		UserManagement: pallet_user_management,
 		BusinessManagement: pallet_business_management,
+		ProductItems: pallet_product_items,
 		ProductManagement: pallet_product_management,
 		SupplyChainTracking: pallet_supply_chain_tracking,
 		RolePermissions: pallet_role_permissions,
@@ -1034,6 +1043,7 @@ impl_runtime_apis! {
 			// Supply chain pallets benchmarks
 			list_benchmark!(list, extra, pallet_user_management, UserManagement);
 			list_benchmark!(list, extra, pallet_business_management, BusinessManagement);
+			list_benchmark!(list, extra, pallet_product_items, ProductItems);
 			list_benchmark!(list, extra, pallet_product_management, ProductManagement);
 			list_benchmark!(list, extra, pallet_supply_chain_tracking, SupplyChainTracking);
 			list_benchmark!(list, extra, pallet_role_permissions, RolePermissions);
@@ -1072,6 +1082,7 @@ impl_runtime_apis! {
 			// Supply chain pallets benchmarks
 			add_benchmark!(params, batches, pallet_user_management, UserManagement);
 			add_benchmark!(params, batches, pallet_business_management, BusinessManagement);
+			add_benchmark!(params, batches, pallet_product_items, ProductItems);
 			add_benchmark!(params, batches, pallet_product_management, ProductManagement);
 			add_benchmark!(params, batches, pallet_supply_chain_tracking, SupplyChainTracking);
 			add_benchmark!(params, batches, pallet_role_permissions, RolePermissions);

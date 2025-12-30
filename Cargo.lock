@@ -9385,6 +9385,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-product-items"
+version = "0.1.0"
+dependencies = [
+ "parity-scale-codec",
+ "polkadot-sdk-frame",
+ "scale-info",
+ "serde",
+]
+
+[[package]]
 name = "pallet-product-management"
 version = "0.1.0"
 dependencies = [
@@ -18016,6 +18026,7 @@ dependencies = [
  "log",
  "pallet-business-management",
  "pallet-external-integrations",
+ "pallet-product-items",
  "pallet-product-management",
  "pallet-role-permissions",
  "pallet-secure-channel",

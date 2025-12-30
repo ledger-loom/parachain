@@ -141,6 +141,20 @@ pub mod pallet {
 	#[pallet::getter(fn categories)]
 	pub type Categories<T: Config> = StorageMap<_, Blake2_128Concat, BoundedVec<u8, T::MaxCategoryLength>, u32>;
 
+	/// Storage: Product Properties (links products to product items with values)
+	/// Maps: (product_id, item_id) -> value
+	/// This allows products to have typed attributes defined in product-items pallet
+	#[pallet::storage]
+	#[pallet::getter(fn product_properties)]
+	pub type ProductProperties<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		u32,          // product_id
+		Blake2_128Concat,
+		u32,          // item_id (from product-items pallet)
+		BoundedVec<u8, ConstU32<256>>,  // value (e.g., "10", "2.5")
+	>;
+
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
@@ -153,6 +167,9 @@ pub mod pallet {
 		CategoryCreated { category: Vec<u8> },
 		ProductAccessGranted { product_id: u32, accessor: T::AccountId },
 		VisibilityUpdated { product_id: u32, new_visibility: VisibilityLevel },
+		ProductPropertyAdded { product_id: u32, item_id: u32, value: Vec<u8> },
+		ProductPropertyUpdated { product_id: u32, item_id: u32, value: Vec<u8> },
+		ProductPropertyRemoved { product_id: u32, item_id: u32 },
 	}
 
 	#[pallet::error]
@@ -170,6 +187,10 @@ pub mod pallet {
 		EncryptedDataTooLong,
 		TooManyAuthorizedRoles,
 		InvalidEncryptionKey,
+		ProductPropertyNotFound,
+		ProductPropertyAlreadyExists,
+		ProductPropertyValueTooLong,
+		ProductItemNotFound,
 	}
 
 	#[pallet::hooks]
@@ -178,6 +199,9 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		/// Create a new product
+		///
+		/// # Parameters
+		/// - `properties`: Optional list of (item_id, value) pairs linking to product items
 		#[pallet::call_index(0)]
 		#[pallet::weight(T::WeightInfo::create_product())]
 		pub fn create_product(
@@ -186,6 +210,7 @@ pub mod pallet {
 			name: Vec<u8>,
 			category: Vec<u8>,
 			attributes: Vec<(Vec<u8>, Vec<u8>)>,
+			properties: Option<Vec<(u32, Vec<u8>)>>,  // NEW: (item_id, value) pairs
 		) -> DispatchResult {
 			let _who = ensure_signed(origin)?;
 
@@ -240,6 +265,25 @@ pub mod pallet {
 			Categories::<T>::mutate(&bounded_category, |count| {
 				*count = Some(count.map_or(1, |c| c.saturating_add(1)));
 			});
+
+			// Store product properties if provided
+			if let Some(props) = properties {
+				for (item_id, value) in props.iter() {
+					let bounded_value: BoundedVec<u8, ConstU32<256>> =
+						value.clone().try_into().map_err(|_| Error::<T>::ProductPropertyValueTooLong)?;
+
+					// TODO: Verify item_id exists in product-items pallet
+					// For now, we trust the caller
+
+					ProductProperties::<T>::insert(product_id, item_id, bounded_value);
+
+					Self::deposit_event(Event::ProductPropertyAdded {
+						product_id,
+						item_id: *item_id,
+						value: value.clone(),
+					});
+				}
+			}
 
 			Self::deposit_event(Event::ProductCreated { product_id, business_id, name });
 
@@ -430,6 +474,149 @@ pub mod pallet {
 			Self::deposit_event(Event::VisibilityUpdated {
 				product_id,
 				new_visibility,
+			});
+
+			Ok(())
+		}
+
+		/// Add a product property (link product to product item with value)
+		///
+		/// # Parameters
+		/// - `product_id`: Product ID
+		/// - `item_id`: Product item ID (from product-items pallet)
+		/// - `value`: Property value (e.g., "10", "2.5")
+		#[pallet::call_index(7)]
+		#[pallet::weight(10_000)]
+		pub fn add_product_property(
+			origin: OriginFor<T>,
+			product_id: u32,
+			item_id: u32,
+			value: Vec<u8>,
+		) -> DispatchResult {
+			let _who = ensure_signed(origin)?;
+
+			// Verify product exists
+			ensure!(
+				Products::<T>::contains_key(product_id),
+				Error::<T>::ProductNotFound
+			);
+
+			// Check if property already exists
+			ensure!(
+				!ProductProperties::<T>::contains_key(product_id, item_id),
+				Error::<T>::ProductPropertyAlreadyExists
+			);
+
+			// Validate value length
+			let bounded_value: BoundedVec<u8, ConstU32<256>> =
+				value.clone().try_into().map_err(|_| Error::<T>::ProductPropertyValueTooLong)?;
+
+			// TODO: Verify item_id exists in product-items pallet
+			// This would require tight coupling or runtime-level integration
+
+			// Store property
+			ProductProperties::<T>::insert(product_id, item_id, bounded_value);
+
+			// Update product's updated_at timestamp
+			Products::<T>::try_mutate(product_id, |maybe_product| -> DispatchResult {
+				if let Some(product) = maybe_product {
+					product.updated_at = frame_system::Pallet::<T>::block_number();
+				}
+				Ok(())
+			})?;
+
+			// Emit event
+			Self::deposit_event(Event::ProductPropertyAdded {
+				product_id,
+				item_id,
+				value,
+			});
+
+			Ok(())
+		}
+
+		/// Update an existing product property value
+		///
+		/// # Parameters
+		/// - `product_id`: Product ID
+		/// - `item_id`: Product item ID
+		/// - `value`: New property value
+		#[pallet::call_index(8)]
+		#[pallet::weight(10_000)]
+		pub fn update_product_property(
+			origin: OriginFor<T>,
+			product_id: u32,
+			item_id: u32,
+			value: Vec<u8>,
+		) -> DispatchResult {
+			let _who = ensure_signed(origin)?;
+
+			// Verify property exists
+			ensure!(
+				ProductProperties::<T>::contains_key(product_id, item_id),
+				Error::<T>::ProductPropertyNotFound
+			);
+
+			// Validate value length
+			let bounded_value: BoundedVec<u8, ConstU32<256>> =
+				value.clone().try_into().map_err(|_| Error::<T>::ProductPropertyValueTooLong)?;
+
+			// Update property
+			ProductProperties::<T>::insert(product_id, item_id, bounded_value);
+
+			// Update product's updated_at timestamp
+			Products::<T>::try_mutate(product_id, |maybe_product| -> DispatchResult {
+				if let Some(product) = maybe_product {
+					product.updated_at = frame_system::Pallet::<T>::block_number();
+				}
+				Ok(())
+			})?;
+
+			// Emit event
+			Self::deposit_event(Event::ProductPropertyUpdated {
+				product_id,
+				item_id,
+				value,
+			});
+
+			Ok(())
+		}
+
+		/// Remove a product property
+		///
+		/// # Parameters
+		/// - `product_id`: Product ID
+		/// - `item_id`: Product item ID to remove
+		#[pallet::call_index(9)]
+		#[pallet::weight(10_000)]
+		pub fn remove_product_property(
+			origin: OriginFor<T>,
+			product_id: u32,
+			item_id: u32,
+		) -> DispatchResult {
+			let _who = ensure_signed(origin)?;
+
+			// Verify property exists
+			ensure!(
+				ProductProperties::<T>::contains_key(product_id, item_id),
+				Error::<T>::ProductPropertyNotFound
+			);
+
+			// Remove property
+			ProductProperties::<T>::remove(product_id, item_id);
+
+			// Update product's updated_at timestamp
+			Products::<T>::try_mutate(product_id, |maybe_product| -> DispatchResult {
+				if let Some(product) = maybe_product {
+					product.updated_at = frame_system::Pallet::<T>::block_number();
+				}
+				Ok(())
+			})?;
+
+			// Emit event
+			Self::deposit_event(Event::ProductPropertyRemoved {
+				product_id,
+				item_id,
 			});
 
 			Ok(())

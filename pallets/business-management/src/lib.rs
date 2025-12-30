@@ -76,6 +76,8 @@ pub mod pallet {
 	pub struct Business<T: Config> {
 		/// Business name
 		pub name: BoundedVec<u8, T::MaxBusinessNameLength>,
+		/// URL-friendly slug (DETAILS.md requirement)
+		pub slug: BoundedVec<u8, ConstU32<100>>,
 		/// Business owner (user account)
 		pub owner: T::AccountId,
 		/// Business UUID (reference to core database - 16 bytes)
@@ -145,6 +147,12 @@ pub mod pallet {
 	pub type Invitations<T: Config> =
 		StorageDoubleMap<_, Blake2_128Concat, [u8; 16], Blake2_128Concat, T::AccountId, Invitation<T>>;
 
+	/// Storage: Business slug lookup (DETAILS.md requirement for recovery)
+	/// Maps slug → business_uuid for uniqueness and lookup
+	#[pallet::storage]
+	#[pallet::getter(fn business_slugs)]
+	pub type BusinessSlugs<T: Config> = StorageMap<_, Blake2_128Concat, BoundedVec<u8, ConstU32<100>>, [u8; 16]>;
+
 	/// Events for the pallet
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -201,6 +209,10 @@ pub mod pallet {
 		InvalidInvitationStatus,
 		/// Cannot remove owner
 		CannotRemoveOwner,
+		/// Business slug already exists (DETAILS.md requirement)
+		SlugAlreadyExists,
+		/// Invalid slug format (DETAILS.md requirement)
+		InvalidSlugFormat,
 	}
 
 	#[pallet::hooks]
@@ -216,6 +228,7 @@ pub mod pallet {
 		///
 		/// Parameters:
 		/// - name: Business name
+		/// - slug: URL-friendly identifier (DETAILS.md requirement)
 		/// - business_uuid: UUID from core database (16 bytes)
 		/// - encryption_type: ProjectKey or WalletKey
 		#[pallet::call_index(0)]
@@ -223,6 +236,7 @@ pub mod pallet {
 		pub fn create_business(
 			origin: OriginFor<T>,
 			name: Vec<u8>,
+			slug: Vec<u8>,
 			business_uuid: [u8; 16],
 			encryption_type: EncryptionType,
 		) -> DispatchResult {
@@ -232,11 +246,22 @@ pub mod pallet {
 			let bounded_name: BoundedVec<u8, T::MaxBusinessNameLength> =
 				name.clone().try_into().map_err(|_| Error::<T>::BusinessNameTooLong)?;
 
+			// Validate and bound slug (DETAILS.md requirement)
+			let bounded_slug: BoundedVec<u8, ConstU32<100>> =
+				slug.clone().try_into().map_err(|_| Error::<T>::InvalidSlugFormat)?;
+
+			// Check slug uniqueness (DETAILS.md: critical for recovery from blockchain)
+			ensure!(
+				!BusinessSlugs::<T>::contains_key(&bounded_slug),
+				Error::<T>::SlugAlreadyExists
+			);
+
 			let now = frame_system::Pallet::<T>::block_number();
 
-			// Create business record (minimal on-chain footprint)
+			// Create business record (with slug for recovery)
 			let business = Business {
 				name: bounded_name,
+				slug: bounded_slug.clone(),
 				owner: who.clone(),
 				business_uuid,
 				encryption_type: encryption_type.clone(),
@@ -248,6 +273,9 @@ pub mod pallet {
 
 			// Store business
 			Businesses::<T>::insert(business_uuid, business);
+
+			// Store slug mapping for uniqueness and lookup (DETAILS.md recovery requirement)
+			BusinessSlugs::<T>::insert(&bounded_slug, business_uuid);
 
 			// Add owner as member
 			BusinessMembers::<T>::insert(business_uuid, &who, MemberRole::Owner);
