@@ -1,0 +1,128 @@
+[package]
+name = "supply-chain-runtime"
+version = "0.1.0"
+authors = ["Supply Chain Team"]
+description = "Supply Chain Parachain Runtime"
+edition = "2021"
+build = "build.rs"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[build-dependencies]
+substrate-wasm-builder = { workspace = true, optional = true }
+
+[dependencies]
+codec = { workspace = true, default-features = false, features = [
+	"derive",
+] }
+hex-literal = { workspace = true, optional = true, default-features = true }
+log = { workspace = true, default-features = false }
+scale-info = { workspace = true, default-features = false, features = ["derive", "serde"] }
+serde = { features = ["derive"], workspace = true, optional = true, default-features = false }
+serde_json = { workspace = true, default-features = false, features = ["alloc"] }
+smallvec = "1.11.0"
+
+# Local
+pallet-user-management = { path = "../pallets/user-management", default-features = false }
+pallet-business-management = { path = "../pallets/business-management", default-features = false }
+pallet-product-items = { path = "../pallets/product-items", default-features = false }
+pallet-product-management = { path = "../pallets/product-management", default-features = false }
+pallet-supply-chain-tracking = { path = "../pallets/supply-chain-tracking", default-features = false }
+pallet-role-permissions = { path = "../pallets/role-permissions", default-features = false }
+pallet-external-integrations = { path = "../pallets/external-integrations", default-features = false }
+pallet-security = { path = "../pallets/security", default-features = false }
+pallet-secure-channel = { path = "../pallets/secure-channel", default-features = false }
+
+# Polkadot SDK with all needed features
+polkadot-sdk = { workspace = true, features = [
+	"cumulus-pallet-aura-ext",
+	"cumulus-pallet-dmp-queue",
+	"cumulus-pallet-parachain-system",
+	"cumulus-pallet-session-benchmarking",
+	"cumulus-pallet-xcm",
+	"cumulus-pallet-xcmp-queue",
+	"cumulus-primitives-aura",
+	"cumulus-primitives-core",
+	"cumulus-primitives-utility",
+	"frame-executive",
+	"frame-support",
+	"frame-system",
+	"pallet-aura",
+	"pallet-authorship",
+	"pallet-balances",
+	"pallet-collator-selection",
+	"pallet-message-queue",
+	"pallet-session",
+	"pallet-sudo",
+	"pallet-timestamp",
+	"pallet-transaction-payment",
+	"pallet-transaction-payment-rpc-runtime-api",
+	"pallet-xcm",
+	"parachains-common",
+	"polkadot-parachain-primitives",
+	"polkadot-runtime-common",
+	"runtime",
+	"sp-api",
+	"sp-consensus-aura",
+	"sp-core",
+	"sp-genesis-builder",
+	"sp-io",
+	"sp-runtime",
+	"sp-std",
+	"sp-version",
+	"staging-parachain-info",
+	"staging-xcm",
+	"staging-xcm-builder",
+	"staging-xcm-executor",
+], default-features = false }
+
+# Direct dependency for register_validate_block! macro
+cumulus-pallet-parachain-system = { workspace = true, default-features = false }
+
+[features]
+default = ["std"]
+std = [
+	"codec/std",
+	"log/std",
+	"polkadot-sdk/std",
+	"cumulus-pallet-parachain-system/std",
+	"scale-info/std",
+	"serde",
+	"serde_json/std",
+	"substrate-wasm-builder",
+	"pallet-user-management/std",
+	"pallet-business-management/std",
+	"pallet-product-items/std",
+	"pallet-product-management/std",
+	"pallet-supply-chain-tracking/std",
+	"pallet-role-permissions/std",
+	"pallet-external-integrations/std",
+	"pallet-security/std",
+	"pallet-secure-channel/std",
+]
+
+runtime-benchmarks = [
+	"hex-literal",
+	"polkadot-sdk/runtime-benchmarks",
+	"pallet-user-management/runtime-benchmarks",
+	"pallet-business-management/runtime-benchmarks",
+	"pallet-product-items/runtime-benchmarks",
+	"pallet-product-management/runtime-benchmarks",
+	"pallet-supply-chain-tracking/runtime-benchmarks",
+	"pallet-role-permissions/runtime-benchmarks",
+	"pallet-external-integrations/runtime-benchmarks",
+	"pallet-security/runtime-benchmarks",
+]
+
+try-runtime = [
+	"polkadot-sdk/try-runtime",
+	"pallet-user-management/try-runtime",
+	"pallet-business-management/try-runtime",
+	"pallet-product-items/try-runtime",
+	"pallet-product-management/try-runtime",
+	"pallet-supply-chain-tracking/try-runtime",
+	"pallet-role-permissions/try-runtime",
+	"pallet-external-integrations/try-runtime",
+	"pallet-security/try-runtime",
+]

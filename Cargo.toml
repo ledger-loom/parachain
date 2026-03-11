@@ -1,0 +1,90 @@
+[workspace.package]
+license = "MIT"
+authors = ["Supply Chain Team"]
+homepage = "https://github.com/supply-chain/parachain"
+repository = "https://github.com/supply-chain/parachain.git"
+edition = "2021"
+
+[workspace]
+default-members = ["node", "runtime"]
+members = [
+    "node",
+    "pallets/user-management",
+    "pallets/business-management",
+    "pallets/product-management",
+    "pallets/supply-chain-tracking",
+    "pallets/role-permissions",
+    "pallets/external-integrations",
+    "pallets/security",
+    "pallets/secure-channel",
+    "pallets/encrypted-data",
+    "runtime",
+]
+resolver = "2"
+
+[workspace.dependencies]
+# Local dependencies
+supply-chain-runtime = { path = "./runtime", default-features = false }
+pallet-user-management = { path = "./pallets/user-management", default-features = false }
+pallet-business-management = { path = "./pallets/business-management", default-features = false }
+pallet-product-management = { path = "./pallets/product-management", default-features = false }
+pallet-supply-chain-tracking = { path = "./pallets/supply-chain-tracking", default-features = false }
+pallet-role-permissions = { path = "./pallets/role-permissions", default-features = false }
+pallet-external-integrations = { path = "./pallets/external-integrations", default-features = false }
+pallet-security = { path = "./pallets/security", default-features = false }
+pallet-secure-channel = { path = "./pallets/secure-channel", default-features = false }
+pallet-encrypted-data = { path = "./pallets/encrypted-data", default-features = false }
+
+# External dependencies
+clap = { version = "4.5.13" }
+color-print = { version = "0.3.4" }
+docify = { version = "0.2.9" }
+futures = { version = "0.3.31" }
+jsonrpsee = { version = "0.24.3" }
+log = { version = "0.4.22", default-features = false }
+polkadot-sdk = { version = "2503.2.0", default-features = false }
+prometheus-endpoint = { version = "0.17.2", default-features = false, package = "substrate-prometheus-endpoint" }
+serde = { version = "1.0.214", default-features = false }
+serde_json = { version = "1.0.132", default-features = false }
+codec = { version = "3.7.5", default-features = false, features = ["derive", "max-encoded-len"], package = "parity-scale-codec" }
+hex-literal = { version = "0.4.1", default-features = false }
+scale-info = { version = "2.11.6", default-features = false }
+smallvec = { version = "1.11.0", default-features = false }
+substrate-wasm-builder = { version = "26.0.1", default-features = false }
+frame = { version = "0.9.1", default-features = false, package = "polkadot-sdk-frame" }
+
+# SP primitives (for pallets that need them directly)
+sp-std = { version = "14.0.0", default-features = false }
+sp-runtime = { version = "39.0.2", default-features = false }
+sp-core = { version = "34.0.0", default-features = false }
+sp-io = { version = "38.0.0", default-features = false }
+
+# Polkadot
+pallet-xcm = { version = "16.0.0", default-features = false }
+polkadot-parachain-primitives = { version = "14.0.0", default-features = false }
+polkadot-runtime-common = { version = "16.0.0", default-features = false }
+staging-xcm = { version = "14.0.1", default-features = false }
+staging-xcm-builder = { version = "16.0.0", default-features = false }
+staging-xcm-executor = { version = "16.0.0", default-features = false }
+
+# Cumulus
+cumulus-pallet-parachain-system = { version = "0.20.0", default-features = false }
+cumulus-pallet-aura-ext = { version = "0.16.0", default-features = false }
+cumulus-pallet-dmp-queue = { version = "0.16.0", default-features = false }
+cumulus-pallet-session-benchmarking = { version = "18.0.0", default-features = false }
+cumulus-pallet-xcm = { version = "0.16.0", default-features = false }
+cumulus-pallet-xcmp-queue = { version = "0.16.0", default-features = false }
+cumulus-primitives-core = { version = "0.15.0", default-features = false }
+cumulus-primitives-utility = { version = "0.16.0", default-features = false }
+pallet-collator-selection = { version = "18.0.0", default-features = false }
+parachains-common = { version = "17.0.0", default-features = false }
+parachain-info = { version = "0.16.0", default-features = false, package = "staging-parachain-info" }
+
+[profile.release]
+opt-level = 3
+panic = "unwind"
+
+[profile.production]
+codegen-units = 1
+inherits = "release"
+lto = true

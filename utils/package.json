@@ -1,0 +1,18 @@
+{
+  "name": "supply-chain-encryption-utils",
+  "version": "1.0.0",
+  "description": "Encryption utilities for supply chain parachain",
+  "main": "encryption-helpers.js",
+  "scripts": {
+    "test:encryption": "node encryption-helpers.js",
+    "test:api": "node api-example.js"
+  },
+  "keywords": ["blockchain", "encryption", "supply-chain", "substrate"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@polkadot/api": "^10.9.1",
+    "@polkadot/keyring": "^12.3.2",
+    "@polkadot/util-crypto": "^12.3.2"
+  }
+}

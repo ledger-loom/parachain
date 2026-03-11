@@ -1,0 +1,40 @@
+[package]
+name = "pallet-secure-channel"
+version = "0.1.0"
+description = "FRAME pallet for secure core-parachain communication"
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+edition.workspace = true
+publish = false
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+codec = { workspace = true }
+scale-info = { workspace = true }
+
+# Substrate
+frame = { workspace = true, features = ["experimental", "runtime"] }
+sp-runtime = { workspace = true }
+
+[dev-dependencies]
+sp-core = { workspace = true }
+sp-io = { workspace = true }
+
+[features]
+default = ["std"]
+std = [
+	"codec/std",
+	"frame/std",
+	"scale-info/std",
+	"sp-runtime/std",
+]
+runtime-benchmarks = [
+	"frame/runtime-benchmarks",
+]
+try-runtime = [
+	"frame/try-runtime",
+]
