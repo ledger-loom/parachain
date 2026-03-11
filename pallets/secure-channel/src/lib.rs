@@ -39,6 +39,8 @@ pub mod pallet {
 	use frame::prelude::*;
 	use frame::deps::codec::{Decode, Encode, MaxEncodedLen};
 	use scale_info::prelude::vec::Vec;
+	use sp_core::sr25519;
+	use sp_io;
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
@@ -205,20 +207,22 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Rotate core's public key with signature verification
+		/// Rotate core's public key with signature verification.
 		///
-		/// This allows core to periodically rotate keys for enhanced security.
-		/// The rotation must be signed with the current private key to prove ownership.
+		/// The `signature` must be an Sr25519 signature of `new_public_key`
+		/// produced by the private key corresponding to the currently registered
+		/// public key. This proves ownership of the old key and prevents
+		/// unauthorised rotations.
 		///
 		/// Parameters:
 		/// - new_public_key: New P-256 public key (33 bytes compressed)
-		/// - signature: Signature of new_public_key with current private key
+		/// - signature: Sr25519 signature of `new_public_key` (64 bytes)
 		#[pallet::call_index(1)]
 		#[pallet::weight(10_000)]
 		pub fn rotate_channel_key(
 			origin: OriginFor<T>,
 			new_public_key: Vec<u8>,
-			_signature: Vec<u8>, // TODO: Implement signature verification
+			signature: Vec<u8>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
@@ -228,9 +232,28 @@ pub mod pallet {
 				Error::<T>::CoreNotRegistered
 			);
 
-			// Ensure caller is authorized core account
+			// Ensure caller is the authorised core account
 			let core_account = CoreAccount::<T>::get().ok_or(Error::<T>::NotAuthorized)?;
 			ensure!(who == core_account, Error::<T>::NotAuthorized);
+
+			// Verify the Sr25519 signature over `new_public_key`.
+			// The signature must have been produced by the master wallet whose
+			// public key is stored in `CorePublicKey` (the Sr25519 account key,
+			// 32 bytes) — NOT the P-256 channel key.
+			ensure!(signature.len() == 64, Error::<T>::SignatureTooLong);
+			let mut sig_bytes = [0u8; 64];
+			sig_bytes.copy_from_slice(&signature);
+
+			// Convert the core account ID to the sr25519 public key bytes
+			// (AccountId32 and sr25519 Public are both 32-byte arrays).
+			let account_bytes: [u8; 32] = who.clone().into();
+
+			let verified = sp_io::crypto::sr25519_verify(
+				&sp_core::sr25519::Signature::from_raw(sig_bytes),
+				&new_public_key,
+				&sp_core::sr25519::Public::from_raw(account_bytes),
+			);
+			ensure!(verified, Error::<T>::InvalidSignature);
 
 			// Get old key
 			let old_key = CorePublicKey::<T>::get().ok_or(Error::<T>::CoreNotRegistered)?;
@@ -238,10 +261,6 @@ pub mod pallet {
 			// Validate new public key length
 			let bounded_new_key: BoundedVec<u8, T::MaxPublicKeyLength> =
 				new_public_key.clone().try_into().map_err(|_| Error::<T>::PublicKeyTooLong)?;
-
-			// TODO: Verify signature
-			// For now, we trust the core account authentication
-			// In production, verify: signature = sign(new_public_key, current_private_key)
 
 			// Update public key
 			CorePublicKey::<T>::put(bounded_new_key.clone());
@@ -274,22 +293,24 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Verify a message from core (prevents replay attacks)
+		/// Verify a message from core and advance the sequence counter.
 		///
-		/// Core must send messages with monotonically increasing sequence numbers.
-		/// This function verifies the sequence and updates the last seen number.
+		/// Core must call this with a monotonically increasing `sequence_number`
+		/// and an Sr25519 signature over `sequence_number_le_bytes || message`.
+		/// The on-chain sequence counter is updated on success, preventing replay
+		/// of old messages.
 		///
 		/// Parameters:
-		/// - sequence_number: Must be greater than last verified sequence
-		/// - message: The message data (for future signature verification)
-		/// - signature: Signature of message with core's private key
+		/// - sequence_number: Must be strictly greater than the last accepted value
+		/// - message: Raw payload bytes (used for signature verification)
+		/// - signature: Sr25519 signature of `sequence_number.to_le_bytes() || message`
 		#[pallet::call_index(2)]
 		#[pallet::weight(5_000)]
 		pub fn verify_core_message(
 			origin: OriginFor<T>,
 			sequence_number: u64,
-			_message: Vec<u8>,
-			_signature: Vec<u8>, // TODO: Implement signature verification
+			message: Vec<u8>,
+			signature: Vec<u8>,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
@@ -299,19 +320,29 @@ pub mod pallet {
 				Error::<T>::CoreNotRegistered
 			);
 
-			// Get last sequence number
+			// Replay prevention: sequence must be strictly increasing
 			let last_seq = LastSequenceNumber::<T>::get();
+			ensure!(sequence_number > last_seq, Error::<T>::InvalidSequenceNumber);
 
-			// Ensure sequence number is greater (prevents replay)
-			ensure!(
-				sequence_number > last_seq,
-				Error::<T>::InvalidSequenceNumber
+			// Verify Sr25519 signature over `sequence_number_le || message`
+			ensure!(signature.len() == 64, Error::<T>::SignatureTooLong);
+			let mut sig_bytes = [0u8; 64];
+			sig_bytes.copy_from_slice(&signature);
+
+			// Build the signed payload: sequence_number (8 bytes LE) || message
+			let mut signed_payload = Vec::with_capacity(8 + message.len());
+			signed_payload.extend_from_slice(&sequence_number.to_le_bytes());
+			signed_payload.extend_from_slice(&message);
+
+			let account_bytes: [u8; 32] = who.clone().into();
+			let verified = sp_io::crypto::sr25519_verify(
+				&sp_core::sr25519::Signature::from_raw(sig_bytes),
+				&signed_payload,
+				&sp_core::sr25519::Public::from_raw(account_bytes),
 			);
+			ensure!(verified, Error::<T>::InvalidSignature);
 
-			// TODO: Verify signature
-			// verify: signature = sign(sequence_number || message, core_private_key)
-
-			// Update last sequence number
+			// Advance the on-chain sequence counter
 			LastSequenceNumber::<T>::put(sequence_number);
 
 			// Emit event
